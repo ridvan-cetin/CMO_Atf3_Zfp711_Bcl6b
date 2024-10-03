@@ -1,0 +1,971 @@
+---
+title: "Preprocessing"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+I am leaving a .txt files which shows IDs of the cells which has been kept called "kept_cells.zip" either in github or GSE.
+
+```{r eval=FALSE}
+r3dcol <- list()
+r3dcol$cols_94 <- c(
+  "#F0E442","#1CE6FF","#FF34FF","#FF4A46","#008941","#006FA6","#A30059","#FFDBE5","#7A4900","#0089A3",
+  "#63FFAC","#B79762",
+  "#004D43","#8FB0FF","#997D87","#809693","#6A3A4C","#b4b701","#4FC601","#3B5DFF","#FF2F80","#61615A",
+  "#BA0900","#6B7900",
+  "#00C2A0","#FFAA92","#FF90C9","#B903AA","#D16100","#922329","#7B4F4B","#A1C299","#0AA6D8","#00846F",
+  "#FFB500","#C2FFED",
+  "#A079BF","#CC0744","#C0B9B2","#C2FF99","#00489C","#6F0062","#0CBD66","#EEC3FF","#456D75","#B77B68",
+  "#7A87A1","#788D66",
+  "#885578","#FAD09F","#FF8A9A","#D157A0","#BEC459","#456648","#0086ED","#886F4C","#34362D","#B4A8BD",
+  "#00A6AA","#452C2C",
+  "#636375","#A3C8C9","#FF913F","#938A81","#575329","#00FECF","#B05B6F","#8CD0FF","#3B9700","#04F757",
+  "#C8A1A1","#1E6E00",
+  "#7900D7","#A77500","#6367A9","#A05837","#6B002C","#772600","#D790FF","#9B9700","#549E79","#FFF69F",
+  "#201625","#72418F",
+  "#BC23FF","#99ADC0","#3A2465","#DDEFFF","#5B4534","#FDE8DC","#404E55","#CB7E98","#A4E804","#324E72"
+)
+r3dcol$cols_46 <- c(
+  "#FFB500","#00C2A0","#D157A0","#8CD0FF","#FF4A46","#FDE8DC","#63FFAC","#B79762","#8FB0FF","#997D87",
+  "#809693","#b4b701",
+  "#4FC601","#FFAA92","#FF90C9","#A1C299","#F0E442","#C2FFED","#A079BF","#C0B9B2","#C2FF99","#EEC3FF",
+  "#B77B68","#7A87A1",
+  "#788D66","#FAD09F","#FF8A9A","#BEC459","#B4A8BD","#A3C8C9","#FF913F","#938A81","#00FECF","#FF34FF",
+  "#1CE6FF","#04F757",
+  "#C8A1A1","#D790FF","#9B9700","#549E79","#FFF69F","#99ADC0","#DDEFFF","#FFDBE5","#CB7E98","#A4E804"
+)
+r3dcol$cols_pjsala <- c(
+  "#005579","#0F4A9C","#139992","#1A1A1A","#354E23","#3F84AA","#532C8A","#635547","#647a4f","#65A83E",
+  "#7F6874","#8870ad",
+  "#8DB5CE","#8EC792","#989898","#9e6762","#B51D8D","#c19f70","#C3C388","#C594BF","#C72228","#c9a997",
+  "#C9EBFB","#cc7818",
+  "#CDE088","#DABE99","#DFCDE4","#EF4E22","#EF5A9D","#F397C0","#F6BFCB","#f79083","#f7f79e","#f9decf",
+  "#FACB12","#FBBE92",
+  "#ff891c"
+)
+r3dcol$cols_4x3 <- c(
+  "#551153","#970098","#9c24cd","#412c00","#997600","#c6a000","#1e3604","#355e07","#4f890e","#002f64",
+  "#0050ae","#1077f3"
+)
+r3dcol$cols_12x1 <- c(
+  '#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a',
+  '#ffff99','#b15928'
+)
+r3dcol$cols_4x3b <- c(
+  "#551153","#970098","#cc34cd","#c85b00","#f98517","#fdbf6f","#00603d","#008c5c","#33b983","#002f64",
+  "#0050ae","#1077f3"
+)
+r3dcol$cols_4x1 <- c(
+  "#970098","#997600","#4f890e","#0050ae"
+)
+r3dcol$cols_4x1b <- c(
+  "#970098","#f98517","#008c5c","#1077f3"
+)
+r3dcol$cols_3a <- c(
+  "#D157A0","#FFB500","#00C2A0"
+)
+r3dcol$cols_3b <- c(
+  "#D454B5","#c85b00","#008c5c"
+)
+```
+# Introduction
+
+Here we will summarize the post-demultiplexed data preparation for downstream analysis. We will try to clean the data as
+much as possible:
+
+-   Removing low-quality cells
+
+-   Removing doublets
+
+-   Removing ambient RNA
+
+-   UMAP, tSNE and Clustering
+
+-   Cell cycle scoring and regression
+
+-   Annotation of the clusters.
+
+We start with around 84K cells and end up with 71K cells. We tried to be as strict as possible.
+
+```{r  eval=FALSE}
+# Loading the packages
+suppressMessages({
+library(Seurat)
+library(SeuratData)
+library(SeuratDisk)
+library(SeuratObject)
+library(SoupX)
+library(reticulate)
+library(scDblFinder)
+library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
+library(hdf5r)
+library(Matrix)
+library(dplyr)
+library(gridExtra)
+library(ggExtra)
+library(gprofiler2)
+library(clustree)
+})
+
+# Set working directory (replace with your path)
+setwd()
+getwd()
+```
+
+# Data Cleaning 1 (Filtering with QC metrics)
+
+## Loading Data
+
+Describe how to load the data.
+
+```{r, eval=FALSE}
+# Loading the seurat files from previous step
+# seurat_Lane1
+# seurat_Lane2
+# seurat_Lane3
+# seurat_Lane4
+# seurat_Lane5
+
+# Make sure that we are working with RNA data, not with CMO
+# DefaultAssay(seurat_Lane1) <- "RNA"
+# DefaultAssay(seurat_Lane2) <- "RNA"
+# DefaultAssay(seurat_Lane3) <- "RNA"
+# DefaultAssay(seurat_Lane4) <- "RNA"
+# DefaultAssay(seurat_Lane5) <- "RNA"
+```
+
+### Adding QC metrics
+
+We will add QC metrics *percent.mt* and *percent.ribo*
+
+```{r, eval=FALSE}
+#lane 1
+seurat_Lane1$log1p_nCount_RNA <- log1p(seurat_Lane1@meta.data$nCount_RNA)
+seurat_Lane1$log1p_nFeature_RNA <- log1p(seurat_Lane1@meta.data$nFeature_RNA)
+seurat_Lane1[["percent.mt"]] <- PercentageFeatureSet(seurat_Lane1, pattern = "^mt-")
+seurat_Lane1[["percent.ribo"]] <- PercentageFeatureSet(seurat_Lane1, pattern = "(^Rpl|^Rps|^Mrp)")
+#lane2
+seurat_Lane2$log1p_nCount_RNA <- log1p(seurat_Lane2@meta.data$nCount_RNA)
+seurat_Lane2$log1p_nFeature_RNA <- log1p(seurat_Lane2@meta.data$nFeature_RNA)
+seurat_Lane2[["percent.mt"]] <- PercentageFeatureSet(seurat_Lane2, pattern = "^mt-")
+seurat_Lane2[["percent.ribo"]] <- PercentageFeatureSet(seurat_Lane2, pattern = "(^Rpl|^Rps|^Mrp)")
+#lane 3
+seurat_Lane3$log1p_nCount_RNA <- log1p(seurat_Lane3@meta.data$nCount_RNA)
+seurat_Lane3$log1p_nFeature_RNA <- log1p(seurat_Lane3@meta.data$nFeature_RNA)
+seurat_Lane3[["percent.mt"]] <- PercentageFeatureSet(seurat_Lane3, pattern = "^mt-")
+seurat_Lane3[["percent.ribo"]] <- PercentageFeatureSet(seurat_Lane3, pattern = "(^Rpl|^Rps|^Mrp)")
+#lane4
+seurat_Lane4$log1p_nCount_RNA <- log1p(seurat_Lane4@meta.data$nCount_RNA)
+seurat_Lane4$log1p_nFeature_RNA <- log1p(seurat_Lane4@meta.data$nFeature_RNA)
+seurat_Lane4[["percent.mt"]] <- PercentageFeatureSet(seurat_Lane4, pattern = "^mt-")
+seurat_Lane4[["percent.ribo"]] <- PercentageFeatureSet(seurat_Lane4, pattern = "(^Rpl|^Rps|^Mrp)")
+#lane 5
+seurat_Lane5$log1p_nCount_RNA <- log1p(seurat_Lane5@meta.data$nCount_RNA)
+seurat_Lane5$log1p_nFeature_RNA <- log1p(seurat_Lane5@meta.data$nFeature_RNA)
+seurat_Lane5[["percent.mt"]] <- PercentageFeatureSet(seurat_Lane5, pattern = "^mt-")
+seurat_Lane5[["percent.ribo"]] <- PercentageFeatureSet(seurat_Lane5, pattern = "(^Rpl|^Rps|^Mrp)")
+```
+
+## Cleaning Data
+
+Here we will start removing unwanted cells and reads.
+
+### Subsetting for HTO or CellRanger **Singlets**
+
+In previous step, based on demultiplexing we added **HTODemux_vs_CallRanger** in metadata of the Seurat. Which divide
+the singlets 1) Singlets which both HTODemux and CellRanger agress, 2) only CellRanger calls singlets, and 3) only
+HTODemux Calls singlets.
+
+```{r,eval=FALSE}
+# repeat the following process for all the Lanes
+Idents(seurat_Lane1) <- "HTODemux_vs_CellRanger"
+L1 <- subset(seurat_Lane1, idents=c("HTODemux_and_CellRanger","unique_CellRanger","unique_HTODemux"))
+
+# L2
+# L3
+# L4
+# L5
+```
+
+### **Filtering low-quality reads (with loose metrics)**
+
+Now we will remove the low-quality reads based on the *percent.mt*, *nCounts_RNA*, and *nFeature_RNA* with MAD (median
+absolute deviation).
+
+#### MAD 5 (examples for only one lane)
+
+```{r eval=FALSE}
+# repeat this process for all the lanes
+Cell.QC.Stat <- L1@meta.data
+
+max.mito.thr <- median(Cell.QC.Stat$percent.mt) + 3*mad(Cell.QC.Stat$percent.mt)
+min.mito.thr <- median(Cell.QC.Stat$percent.mt) - 3*mad(Cell.QC.Stat$percent.mt)
+max.mito.thr
+min.mito.thr
+p1_mt <- ggplot(Cell.QC.Stat, aes(x=nFeature_RNA, y=percent.mt)) +
+      geom_point() +
+      geom_hline(aes(yintercept = max.mito.thr), colour = "red", linetype = 2) +
+      geom_hline(aes(yintercept = min.mito.thr), colour = "red", linetype = 2) +
+      annotate(geom = "text", label = paste0(as.numeric(table(Cell.QC.Stat$percent.mt > max.mito.thr |
+      Cell.QC.Stat$percent.mt < min.mito.thr)[2])," cells removed\n", 
+      as.numeric(table(Cell.QC.Stat$percent.mt > max.mito.thr | Cell.QC.Stat$percent.mt <
+                         min.mito.thr)[1])," cells remain"), x = 6000, y = 0.1)
+
+ggMarginal(p1_mt, type = "histogram", fill="lightgrey", bins=100)  
+
+# Filter cells based on these thresholds
+Cell.QC.Stat <- Cell.QC.Stat %>% filter(percent.mt < max.mito.thr) %>% 
+  filter(percent.mt > min.mito.thr)
+
+p1_mta <- ggplot(Cell.QC.Stat, aes(x=nFeature_RNA, y=percent.mt)) +
+      geom_point() +
+      geom_hline(aes(yintercept = max.mito.thr), colour = "red", linetype = 2) +
+      geom_hline(aes(yintercept = min.mito.thr), colour = "red", linetype = 2) +
+      annotate(geom = "text", label = paste0(as.numeric(table(Cell.QC.Stat$percent.mt > max.mito.thr | 
+      Cell.QC.Stat$percent.mt < min.mito.thr)[2])," cells removed\n",
+      as.numeric(table(Cell.QC.Stat$percent.mt > max.mito.thr | 
+                         Cell.QC.Stat$percent.mt < min.mito.thr)[1])," cells remain"),
+      x = 6000, y = 0.1)
+
+ggMarginal(p1_mta, type = "histogram", fill="lightgrey", bins=100) 
+
+# Set low and hight thresholds on the number of detected genes
+min.Genes.thr <- median(log10(Cell.QC.Stat$nFeature_RNA)) - 5*mad(log10(Cell.QC.Stat$nFeature_RNA))
+max.Genes.thr <- median(log10(Cell.QC.Stat$nFeature_RNA)) + 5*mad(log10(Cell.QC.Stat$nFeature_RNA))
+min.Genes.thr
+max.Genes.thr
+# mad 3
+min.Genes.thr3 <- median(log10(Cell.QC.Stat$nFeature_RNA)) - 3*mad(log10(Cell.QC.Stat$nFeature_RNA))
+max.Genes.thr3 <- median(log10(Cell.QC.Stat$nFeature_RNA)) + 3*mad(log10(Cell.QC.Stat$nFeature_RNA))
+min.Genes.thr3
+max.Genes.thr3
+
+# Set hight threshold on the number of transcripts
+max.nUMI.thr <- median(log10(Cell.QC.Stat$nCount_RNA)) + 5*mad(log10(Cell.QC.Stat$nCount_RNA))
+min.nUMI.thr <- median(log10(Cell.QC.Stat$nCount_RNA)) - 5*mad(log10(Cell.QC.Stat$nCount_RNA))
+max.nUMI.thr
+min.nUMI.thr
+
+# Set hight threshold on the number of transcripts
+max.nUMI.thr3 <- median(log10(Cell.QC.Stat$nCount_RNA)) + 3*mad(log10(Cell.QC.Stat$nCount_RNA))
+min.nUMI.thr3 <- median(log10(Cell.QC.Stat$nCount_RNA)) - 3*mad(log10(Cell.QC.Stat$nCount_RNA))
+max.nUMI.thr3
+min.nUMI.thr3
+
+# Gene/UMI scatter plot before filtering
+p1_nFnC <- ggplot(Cell.QC.Stat, aes(x=log10(nCount_RNA), y=log10(nFeature_RNA))) +
+      geom_point() +
+      geom_smooth(method="lm") +
+      geom_hline(aes(yintercept = min.Genes.thr), colour = "green", linetype = 2) +
+      geom_hline(aes(yintercept = max.Genes.thr), colour = "darkgreen", linetype = 2) +
+	  geom_vline(aes(xintercept = min.nUMI.thr), colour = "red", linetype = 2)+
+      geom_vline(aes(xintercept = max.nUMI.thr), colour = "darkred", linetype = 2)
+ggMarginal(p1_nFnC , type = "histogram", fill="lightgrey")
+
+
+p1_nFnC3 <- ggplot(Cell.QC.Stat, aes(x=log10(nCount_RNA), y=log10(nFeature_RNA))) +
+      geom_point() +
+      geom_smooth(method="lm") +
+      geom_hline(aes(yintercept = min.Genes.thr), colour = "green", linetype = 2) +
+      geom_hline(aes(yintercept = max.Genes.thr), colour = "darkgreen", linetype = 2) +
+	  geom_vline(aes(xintercept = min.nUMI.thr), colour = "red", linetype = 2)+
+      geom_vline(aes(xintercept = max.nUMI.thr), colour = "darkred", linetype = 2)+
+      geom_hline(aes(yintercept = min.Genes.thr3), colour = "blue", linetype = 2) +
+      geom_hline(aes(yintercept = max.Genes.thr3), colour = "blue", linetype = 2) +
+	  geom_vline(aes(xintercept = min.nUMI.thr3), colour = "blue", linetype = 2)+
+      geom_vline(aes(xintercept = max.nUMI.thr3), colour = "blue", linetype = 2)
+
+ggMarginal(p1_nFnC3 , type = "histogram", fill="lightgrey")
+
+# Filtering with MAD 5
+# Filter cells base on both metrics
+Cell.QC.Stat <- Cell.QC.Stat %>% 
+	filter(log10(nFeature_RNA) > min.Genes.thr) %>%
+	filter( log10(nCount_RNA) > min.nUMI.thr)   %>% 
+	filter(log10(nCount_RNA) < max.nUMI.thr)	%>%
+	filter(log10(nFeature_RNA) < max.Genes.thr)
+
+# Gene/UMI scatter plot After filtering
+p1_nFnC <- ggplot(Cell.QC.Stat, aes(x=log10(nCount_RNA), y=log10(nFeature_RNA))) +
+      geom_point() +
+      geom_smooth(method="lm") +
+      geom_hline(aes(yintercept = min.Genes.thr), colour = "green", linetype = 2) +
+      geom_hline(aes(yintercept = max.Genes.thr), colour = "darkgreen", linetype = 2) +
+	  geom_vline(aes(xintercept = min.nUMI.thr), colour = "red", linetype = 2)+
+      geom_vline(aes(xintercept = max.nUMI.thr), colour = "darkred", linetype = 2)
+ggMarginal(p1_nFnC , type = "histogram", fill="lightgrey")
+```
+
+the main population nUMI/nGene relationship annotation *not removal*
+
+```{r eval=FALSE}
+lm.model <- lm(data = Cell.QC.Stat, formula = log10(nFeature_RNA) ~ log10(nCount_RNA))
+
+p2_lnFlnC  <- ggplot(Cell.QC.Stat, aes(x=log10(nCount_RNA), y=log10(nFeature_RNA))) +
+  geom_point() +
+  geom_smooth(method="lm") +
+      geom_hline(aes(yintercept = min.Genes.thr), colour = "green", linetype = 2) +
+      geom_hline(aes(yintercept = max.Genes.thr), colour = "darkgreen", linetype = 2) +
+	  geom_vline(aes(xintercept = min.nUMI.thr), colour = "red", linetype = 2)+
+      geom_vline(aes(xintercept = max.nUMI.thr), colour = "darkred", linetype = 2)+
+  geom_abline(intercept = lm.model$coefficients[1] - 0.09 , slope = lm.model$coefficients[2], 
+              color="orange") +
+  annotate(geom = "text", label = paste0(dim(Cell.QC.Stat)[1], " QC passed cells"), x = 4, y = 3.8)
+
+ggMarginal(p2_lnFlnC, type = "histogram", fill="lightgrey")
+
+#Filter cells below the main population nUMI/nGene relationship
+# Cells to exclude lie below an intersept offset of -0.09
+Cell.QC.Stat$valideCells <-
+  log10(Cell.QC.Stat$nFeature_RNA) >
+  (log10(Cell.QC.Stat$nCount_RNA) * lm.model$coefficients[2] + (lm.model$coefficients[1] - 0.09))
+
+p3_lnFlnC <- ggplot(Cell.QC.Stat, aes(x=log10(nCount_RNA), y=log10(nFeature_RNA))) +
+  geom_point(aes(colour = valideCells)) +
+  geom_smooth(method="lm") +
+  geom_abline(intercept =
+                lm.model$coefficients[1] - 0.09 , slope = lm.model$coefficients[2], color="orange") + 
+  theme(legend.position="none") +
+  annotate(geom = "text", label =
+             paste0(as.numeric(table(Cell.QC.Stat$valideCells)[2]),
+                    " QC passed cells\n",
+                                         as.numeric(table(Cell.QC.Stat$valideCells)[1]), 
+                    " QC filtered"), x = 4, y = 3.8)
+
+ggMarginal(p3_lnFlnC, type = "histogram", fill="lightgrey")
+
+# We are not gonna remove  nUMI/nGene relationship, we are just gonna annotate it. 
+```
+
+MAD 3 - Annotation
+
+We removed the cells with MAD =5, but it is ok for initial removal. MAD=5 allows the some low qc cells presencence which
+will be need processes (eg. Doublet removal). But after conclusion of these processes I will use more stricter MAD
+parameter (MAD = 3). For this purpose I will annotate them in this step.
+
+```{r eval=FALSE}
+Cell.QC.Stat$mad3_valide <- with(Cell.QC.Stat, {
+  log10_nFeature_RNA <- log10(nFeature_RNA)
+  log10_nCount_RNA <- log10(nCount_RNA)
+  
+  condition1 <- log10_nFeature_RNA > min.Genes.thr3
+  condition2 <- log10_nCount_RNA > min.nUMI.thr3
+  condition3 <- log10_nCount_RNA < max.nUMI.thr3
+  condition4 <- log10_nFeature_RNA < max.Genes.thr3
+
+  # Combine conditions
+  condition1 & condition2 & condition3 & condition4
+})
+```
+
+Subsetting the Seurat object, Keeping the cells which pass the QC.
+
+```{r eval=FALSE}
+L1 <- subset(L1, cells=Cell.QC.Stat$sample_id)
+```
+
+We will add the MAD3 and nCount_RNA/nFeature_RNA ratio_0.9 as metadata
+
+```{r eval=FALSE}
+valide_cells_09 <-  Cell.QC.Stat[,c("valideCells","mad3_valide")]
+colnames(valide_cells_09) <- c("nFeature_nCount_0_9_ratio","MAD3_filter")
+L1 <- AddMetaData(L1, metadata = valide_cells_09)
+```
+
+### Related Plots
+
+Before Removal
+
+```         
+HTODemux_and_CellRanger         unique_HTODemux       unique_CellRanger 
+                  15899                    1395                      75 
+HTODemux_and_CellRanger         unique_HTODemux       unique_CellRanger 
+                  16575                     677                     224  
+HTODemux_and_CellRanger         unique_HTODemux       unique_CellRanger 
+                  17229                     673                     442 
+HTODemux_and_CellRanger       unique_CellRanger         unique_HTODemux 
+                  18291                     498                     743 
+HTODemux_and_CellRanger       unique_CellRanger         unique_HTODemux 
+                  19452                     492                     699 
+```
+
+After removal
+
+```         
+HTODemux_and_CellRanger         unique_HTODemux       unique_CellRanger 
+                  14599                    1232                      64 
+
+HTODemux_and_CellRanger         unique_HTODemux       unique_CellRanger 
+                  14861                     484                     195 
+
+HTODemux_and_CellRanger         unique_HTODemux       unique_CellRanger 
+                  15433                     535                     391 
+
+HTODemux_and_CellRanger       unique_CellRanger         unique_HTODemux 
+                  16929                     440                     625 
+
+HTODemux_and_CellRanger       unique_CellRanger         unique_HTODemux 
+                  17480                     436                     576 
+```
+
+# Data Cleaning (Ambient RNA Removal with SoupX)
+
+We will remove ambient RNA with SoupX. I will use default settings.
+
+We will get the raw data.
+
+```{r eval=FALSE}
+data_l1 <- readRDS(".../data_l1.RDS")
+```
+
+We will start clustering the data, this is not final clustering. Having cluster infromation helps the SoupX.
+
+```{r eval=FALSE}
+#repeat this process for all the lanes
+# Backing up the orginal counts
+L1[["original.counts"]] <- CreateAssayObject(counts = L1@assays$RNA$counts)
+# Quick Clustering helps the SoupX,
+  L1 <- NormalizeData(L1, verbose = FALSE)
+  L1 <- FindVariableFeatures(object = L1, nfeatures = 4000, verbose = FALSE, selection.method = 'vst')
+  L1 <- ScaleData(L1, verbose = FALSE)
+  L1 <- RunPCA(L1, npcs = 80, verbose = FALSE)
+  L1 <- FindNeighbors(L1, dims = 1:80, verbose = FALSE)
+  L1 <- FindClusters(L1, resolution = 1.5, verbose = FALSE)
+  L1 <- RunUMAP(L1, dims = 1:80, verbose = FALSE)
+  L1$soup_group <- L1@meta.data[['seurat_clusters']]
+
+# SoupX
+sc = SoupChannel(data_l1$`Gene Expression`, L1@assays$RNA$counts, calcSoupProfile = FALSE)
+sc = estimateSoup(sc)
+sc <- setClusters(sc, L1$soup_group)
+sc <- autoEstCont(sc, doPlot=TRUE)     # it was False I swicth to TRUE
+head(sc$soupProfile[order(sc$soupProfile$est, decreasing = TRUE), ], n = 100)
+plotMarkerDistribution(sc)
+
+out = adjustCounts(sc,roundToInt = T)
+L1@assays$RNA$soupXauto <- out
+#  checking the removal percentage with total reads
+sum(L1@assays$RNA$soupXauto)/sum(L1@assays$original.counts@counts)*100 
+
+L1@assays$RNA@layers$counts <- L1@assays$RNA@layers$soupXauto
+L1@assays$RNA@layers$soupXauto <- NULL
+```
+
+## SoupX plots
+
+
+# Data Cleaning - Doublet Detection (scDblFinder)
+
+We will use scDblFinder for doublet removal.
+
+```{r eval=FALSE}
+sce_L1 <- scDblFinder(GetAssayData(L1, slot="counts",dbr=0.2), clusters=Idents(L1))
+table(sce_L1$scDblFinder.class)
+L1$scDblFinder_score<- sce_L1$scDblFinder.score
+L1$scDblFinder_class <- sce_L1$scDblFinder.class
+```
+
+
+I want to use stricter parameter other than calculated threshold by scDblFinder
+
+```{r eval=FALSE}
+Lane0$scDblFinder_manual025 <- ifelse(Lane0@meta.data$scDblFinder_score > 0.25, "doublet", "singlet")
+```
+
+```{r eval=FALSE}
+VlnPlot(Lane0, features="scDblFinder_score", group.by="cluster_4")+ geom_hline(yintercept=0.37,
+                                                                               linetype="dashed", 
+                color = "red", size=1)+ geom_hline(yintercept=0.30, linetype="dashed", 
+                color = "blue", size=1) + geom_hline(yintercept=0.25, linetype="dashed", 
+                color = "purple", size=1)&NoLegend()
+```
+
+![scDblFinder score, red average threshold set by software. blue, threshold 0.30, purple threshold at
+0.25](images/clipboard-2656047464.png)
+
+# Merging
+
+```{r eval=FALSE}
+Lane0 <- merge(L1, y=c(L2,L3,L4,L5))
+Lane0 <- DietSeurat(Lane0)
+Lane0 <- JoinLayers(Lane0)
+```
+
+# Advanced Cleaning
+
+We will re-do the PCA and Clustering steps
+
+```{r eval=FALSE}
+Lane0 <- NormalizeData(Lane0, normalization.method = "LogNormalize", scale.factor = 10000,verbose = F)
+all.genes <- rownames(Lane0)
+Lane0 <- ScaleData(Lane0, features = all.genes,verbose = F)
+Lane0 <-   FindVariableFeatures(Lane0, selection.method = 'vst', nfeatures = 4000,verbose = F)
+Lane0 <-   RunPCA(Lane0, features = VariableFeatures(Lane0), npcs = 75,verbose = F, 
+                  reduction.name = "lpca")
+Lane0 <- FindNeighbors(Lane0, reduction = "lpca",dims = 1:75)
+Lane0 <- RunUMAP(Lane0, reduction = "lpca", dims = 1:75, spread = 2, reduction.name ="umap_1")
+Lane0 <- FindClusters(Lane0, resolution = 4 ,algorithm = 4, method = 'igraph', n.start =100, 
+                      n.iter =100 ,cluster.name = "cluster_4",verbose=F)
+
+# also re-do the cell cycle
+s.genes.updated.2019 <- cc.genes.updated.2019$s.genes
+g2m.genes.updated.2019 <- cc.genes.updated.2019$g2m.genes
+mmus_s =gorth(cc.genes.updated.2019$s.genes, source_organism = 'hsapiens', 
+              target_organism = 'mmusculus')$ortholog_name
+mmus_g2m_2=gorth(cc.genes.updated.2019$g2m.genes,source_organism = 'hsapiens',
+                 target_organism = 'mmusculus')$ortholog_name
+mmus_s_2 <- c(mmus_s,"Pold3","Atad2")
+length(s.genes.updated.2019)
+s.genes <- mmus_s_2
+g2m.genes <- mmus_g2m_2
+s.genes
+g2m.genes
+Lane0 <- CellCycleScoring(Lane0, s.features = s.genes, g2m.features = g2m.genes, set.ident = T)
+```
+
+## Removal with scDblFinder, Demultiplexing, MAD3 and Doublet-heavy clusters
+
+```{r eval=FALSE}
+
+# for demultiplexing I will use the intersection of the singlets from HTODemux() and CellRanger
+# HTODemux() 
+Idents(Lane0) <-"CMO_classification.global"
+Lane0 <- subset(Lane0, idents = c("Doublet","Negative"),invert=T)
+# Subsetting for the CellRanger "singlet"
+Idents(Lane0) <-"CellRanger_Assignment_global"
+Lane0 <- subset(Lane0, ident="singlet")
+
+# MAD3 Filter
+Idents(Lane0) <- "MAD3_filter"
+table(Idents(Lane0))
+Lane0 <- subset(Lane0, idents="TRUE")
+
+#scDblFinder Doublet Removal
+Lane0$scDblFinder_manual020 <- ifelse(Lane0@meta.data$scDblFinder_score > 0.20, "doublet", "singlet")
+Idents(Lane0) <- "scDblFinder_manual020"
+Lane0 <- subset(Lane0, idents="singlet")
+
+```
+
+## Cell Cycle Regression and Dim-Reduction
+
+```{r eval=FALSE}
+cmo <- Lane0
+cmo <- ScaleData(cmo, vars.to.regress = c("S.Score", "G2M.Score"), features = rownames(cmo))
+
+# Re-running the Seurat Pipeline again
+cmox <- FindVariableFeatures(cmox, selection.method = "vst",nfeatures = 4000)
+cmox <- RunPCA(cmox, features = VariableFeatures(cmox), reduction.name = "cc_pca",npcs = 75)
+
+cmox <- RunUMAP(cmox,reduction = "cc_pca" ,dims = 1:75, spread = 1,n.neighbors = 50,n.epochs = 1000,
+                n.components = 3,reduction.name = "cc_umap_3xx_3d")
+cmox <- RunUMAP(cmox,reduction = "cc_pca" ,dims = 1:75, spread = 1,n.neighbors = 50,n.epochs = 1000,
+                n.components = 2,reduction.name = "cc_umap_3xx")
+cmox <- FindNeighbors(cmox, reduction = "cc_pca",dims = 1:75, k.param = 50)
+cmox <- FindClusters(cmox, resolution = 1.25, algorithm = 4, method = 'igraph',
+                     n.start =100 , n.iter =100 ,cluster.name = "cc_Leiden_1.25_x100",verbose=F)
+
+cmox <- RunTSNE(cmox,reduction = "cc_pca" ,dims = 1:75, reduction.name = "cc_tsne")
+
+
+```
+
+## Subclustering with "FindSubCluster"
+
+I will subcluster certain clusters
+
+```{r eval=FALSE}
+Idents(cmox) <- "cc_Leiden_1.25_x100"
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="16",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_16",
+  resolution = 0.25,
+  algorithm = 4
+)
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="11",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_11",
+  resolution = 0.25,
+  algorithm = 4
+)
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="10",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_10",
+  resolution = 0.2,
+  algorithm = 4
+)
+
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="13",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_13",
+  resolution = 0.25,
+  algorithm = 4
+)
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="7",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_7",
+  resolution = 0.25,
+  algorithm = 4
+)
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="17",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_17",
+  resolution = 0.25,
+  algorithm = 4
+)
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="20",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_20",
+  resolution = 0.2,
+  algorithm = 4
+)
+
+cmox <- 
+    FindSubCluster(
+  cmox,
+  cluster="15",graph.name = "RNA_snn",
+  subcluster.name = "sub.cluster_15",
+  resolution = 0.2,
+  algorithm = 4
+)
+
+cmox <- FindSubCluster(cmox,  cluster="8",graph.name = "RNA_snn", 
+                       subcluster.name = "sub.cluster_8",  resolution = 0.25,  algorithm = 4 )
+
+cmox <- FindSubCluster(cmox,  cluster="18",graph.name = "RNA_snn",  subcluster.name = "sub.cluster_18",
+                       resolution = 0.25,  algorithm = 4 )
+
+cmox <- FindSubCluster(cmox,  cluster="21",graph.name = "RNA_snn", 
+                       subcluster.name = "sub.cluster_21",  resolution = 0.25,  algorithm = 4 )
+
+```
+
+## Renaming the Clusters
+
+```{r eval=FALSE}
+# High Resolution
+Idents(cmox) <- "sub.cluster_21"
+new.cluster.ids <- c("Naive_ES","Hoxb_Plxna4","Hoxa_Dach1","Hoxa_Wnt2_G1","Hoxa_Igfbp7","EMP_Sepp1+",
+                     "PS_Mesp1","Hoxa_Actc1","Hoxa_Fgf12_SG2M","EMP_Il17ra","Hoxb_Upk3p",
+                     "Mesoderm_Mixl1","Erythroid1a","Endothelium_Cyp26b1","Hoxb_Cacna1d",
+                     "EMP_Ccl4","Mesoderm_Fgf15","Hoxa_Greb1","Erythroid3","PGC","Epiblast",
+                     "Ectoderm_Cldn3","Erythroid2","BProgenitors","Hoxb_Nrxn3","Endothelium_Cdh5",
+                     "Hoxb_Stard8","Endoderm_Fgf5","MegakP3","Ectoderm_Sfn","Endothelium_Gadd45g",
+                     "PS_T","MegakP1","MegakP2","Endothelium_Rsad2","Erythroid1b","Endoderm_Ttr",
+                     "Ectoderm_Anxa1","Hoxba_Ifit1","EMP_Nrg1")
+
+names(new.cluster.ids) <- levels(cmox)
+cmox <- RenameIdents(cmox, new.cluster.ids)
+cmox$cc_clusters <- Idents(cmox)
+
+names(new.cluster.ids) <- levels(cmox)
+cmox <- RenameIdents(cmox, new.cluster.ids)
+cmox$cc_cluster_low <-  Idents(cmox)
+
+# mid resolution
+new.cluster.ids <- 
+  c("Naive_ES","Hoxb","Hoxa","Hoxa","Hoxa","EMP","PS","Hoxa","Hoxa","EMP","Hoxb","Mesoderm",
+    "Erythroid","Endothelium","Hoxb","EMP","Mesoderm","Hoxa","Erythroid","PGC","Epiblast",
+    "Ectoderm","Erythroid","BProgenitors","Hoxb","Endothelium","Hoxb","Endoderm","MegakP",
+    "Ectoderm","Endothelium","PS","MegakP","MegakP","Endothelium","Erythroid","Endoderm","
+    Ectoderm","Hoxab","EMP")
+
+names(new.cluster.ids) <- levels(cmox)
+cmox <- RenameIdents(cmox, new.cluster.ids)
+cmox$cc_cluster_lower <-    Idents(cmox)
+
+# some clean up
+cmox@reductions$pca <- cmox@reductions$newpcacc
+cmox@reductions$umap <- cmox@reductions$newumapcc
+cmox@reductions$umap3d <- cmox@reductions$newumapcc3d
+
+```
+
+### Subsetting the clusters to major groups
+
+```{r eval=FALSE}
+Early <- subset(cmox,idents = c("Naive_ES","PS","PGC","Epiblast","Ectoderm","Endoderm"))
+Mesoderm <- subset(cmox,idents = c("Mesoderm","Hoxa","Hoxb","Hoxab"))
+Hematopoietic <- subset(cmox,idents = c("EMP","Erythroid","Endothelium","BProgenitors","MegakP"))
+
+# we will treath them as seperate seurat objects
+# Early
+Early <- FindVariableFeatures(Early, selection.method = "vst", nfeatures = 4000)
+Early <- RunPCA(Early, features = VariableFeatures(object = Early),npcs = 50,
+                reduction.name = "pcaearly")
+Early <- FindNeighbors(Early, dims = 1:50)
+Early <- RunUMAP(Early, reduction="pcaearly",dims = 1:50,reduction.name="umapearly")
+# Mesoderm
+Mesoderm <- FindVariableFeatures(Mesoderm, selection.method = "vst", nfeatures = 4000)
+Mesoderm <- RunPCA(Mesoderm, features = VariableFeatures(object = Mesoderm),npcs = 50,
+                   reduction.name = "pcamesoderm")
+Mesoderm <- FindNeighbors(Mesoderm, dims = 1:50)
+Mesoderm <- RunUMAP(Mesoderm, reduction="pcamesoderm",n.epochs = 500,dims = 1:50,
+                    reduction.name="umapmesoderm")
+# Hematopoietic
+Hematopoietic <- FindVariableFeatures(Hematopoietic, selection.method = "vst", nfeatures = 4000)
+Hematopoietic <- RunPCA(Hematopoietic, features = VariableFeatures(object = Hematopoietic),
+                        npcs = 50,reduction.name = "pcahema")
+Hematopoietic <- FindNeighbors(Hematopoietic, dims = 1:50)
+Hematopoietic <- RunUMAP(Hematopoietic, reduction="pcahema",n.epochs = 500,dims = 1:50,
+                         reduction.name="umaphema")
+
+```
+
+
+## Resolutions and Levels of the annotations
+
+```{r eval=FALSE}
+clustree(cmo, prefix = "cl_", node_text_angle = 40,layout="sugiyama",node_text_size = 4.5, edge_width=0.5,node_colour = "lightblue")+ylim(0.9,3.1)&NoLegend()
+```
+
+
+```{r eval=FALSE}
+hox_genes <- list()
+hox_genes$hoxa_genes <- grep("^Hoxa", rownames(cmo), value = TRUE)
+hox_genes$hoxb_genes <- grep("^Hoxb", rownames(cmo), value = TRUE)
+hox_genes$hoxc_genes <- grep("^Hoxc", rownames(cmo), value = TRUE)
+hox_genes$hoxd_genes <- grep("^Hoxd", rownames(cmo), value = TRUE)
+
+cmo <- AddModuleScore(cmo, features = hox_genes, name = "Score" )
+cmo$score_hoxa <- cmo$Score1
+cmo$score_hoxb <- cmo$Score2
+cmo$score_hoxc <- cmo$Score3
+cmo$score_hoxd <- cmo$Score4
+
+cmo$Score1 <- NULL
+cmo$Score2 <- NULL
+cmo$Score3 <- NULL
+cmo$Score4 <- NULL
+
+DotPlot(cmo, features = hox_genes, scale.by = "size", )+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size = 15))+
+  geom_hline(yintercept=c(7.5,9.5), color = "red")+xlab("")+ ylab("")
+DotPlot(cmo, features = c("score_hoxa","score_hoxb","score_hoxc","score_hoxd"))+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1,size = 15))+xlab("")+ 
+  ylab("")+NoLegend()
+hox_pl_b
+
+
+```
+
+
+## Marker
+
+```{r eval=FALSE}
+markers <- list()
+markers$Naive <- c("Morc1","Ooep","Sox2","Esrrb","Klf2","Zfp42")
+markers$Epib <- c("Pim2","Tcfl5","Kcnj3","Pou3f1","Nanog","Pou5f1")
+markers$PST <- c("T","Igfbp3","Ppp4r4","Appl1","Rab18","Fgf8")
+markers$EcXSfn <- c("Sfn","Cxcl16","Synpo2l","Ltb","Dusp14","Nhsl1","S100a6")
+markers$EcXCldn3 <- c("Cldn3","Tacstd2","Wnt4","Krt7")
+markers$EcXAnxa1 <- c("Anxa1","Cd44","Robo2","Cdkn2b","Zeb2")
+markers$PGC <-  c("Ttc28","Dnd1","Hmcn1","Prdm1")
+markers$PSMesp1 <- c("Mesp1","Limch1","Wnt5a")
+markers$EnXFgf5 <- c("Fgf5","Fgf10","Lhx1","Gsc","Sox17","Dgkk","Otx2","Cfc1")
+markers$EnXTtr  <- c("Ttr","Spink1","Ctsh","Clic6","Dpp4","S100g","Car4")
+markers$MesoMixl1 <- c("Mixl1","Eomes","Wnt3","Tbx3","Rftn1","Grrp1","Car14")
+markers$bFgf15 <- c("Fgf15","Tnnt3","Msx2","Foxo4","Ms4a4d")
+markers$bCacna1d <- c("Cacna1d","Htra1","Adgrg6","Twist1","Col13a1","Smpd3")
+markers$bNrxn3   <- c("Nrxn3","Nfib","Fmn1","Tmod1","Lhx2")
+markers$bStard8 <- c("Stard8","Slc2a1","Cobll1","Bmp4")
+markers$bUpk3b   <- c("Upk3b","Podxl","Cryab","Wisp1","Ak5","Ezr","Tnni1","Tinagl1")
+markers$bPlxna4 <- c("Plxna4","Epha3","Plcl1","Nrxn3")
+markers$aGreb1 <- c("Greb1", "Lef1", "Cdx2", "Isl1")
+markers$aDach1  <- c("Dach1","Prrx1","Mecom","Ebf1","Crabp2","Foxp2","Adgrl3","Sox11")
+markers$aActc1  <- c("Actc1","Krt19","Upk3b","Myl9","Bmp4","Frzb")
+markers$aIgfbp7 <-c("Igfbp7","Sparcl1","Cdo1","Wnt2","Cntn4","Tbx4","Eya4")
+markers$aWnt2G1 <-c("Wnt2","Ccser1","Rbfox1","Fas","Scube1","Fgf12")
+markers$aFgf12SG2M <- c("Fgf12","Ccser1","Scube1","Wnt2","Negr1")
+markers$baIfit1 <- c("Ifit1","Isg15","Gbp7","Ifit3","Usp18","Rsad2","Oasl2")
+markers$BPr <- c("Tal1","Lmo2","Runx1","Slc39a8","Fgf3","Myb","Slc32a1","Rpp25")
+markers$Ery1a   <- c("Glrx5","Tspan33","Nt5dc2","Mthfd2","Asns")
+markers$Ery1b <- c("Tpx2","Cpox","Cited4","Ssx2ip","Cenpk")
+markers$Ery2 <- c("Slc4a1","Ermap","Hemgn","Rhag","Acp5","Kel")
+markers$Ery3 <- c("Hbb-y","Hba-a2","Alas2","Slc25a21","Gypa","March3","Mllt3")
+markers$MegP1 <- c("Rab27b","Gp1bb","Gp9","Treml1","Sla2","Gnaz","Mpl","Mrvi1")
+markers$MegP2 <- c("Hsd3b1","Thbs1","Gp1bb","Gp5","Tubb1","Rasl10a","Cd226")
+markers$MegP3   <- c("Thbs1","Gp1bb","Gp9","Treml1","Alox12","Vwf")
+markers$EndGadd45g <- c("Gadd45g","Ramp2","Mest","Sparc","Col4a1","Kdr","Rhoj","Etv2","Tek","Mast4")
+markers$EndCdh5 <- c("Cdh5","Cldn5","Ldb2","Emcn","Col4a1","Ecscr","Plagl1","Prex2","Adgrl4","Icam2")
+markers$EndCyp26b1<-c("Cyp26b1","Pdlim3","Ccdc80","Mal","Il1r1","Igfbp7","Gata4","Dok4","Meis2","Adgrf5")
+markers$EndRsad2 <- c("Rsad2","Ifit3","Ifit3b","Iigp1","Gbp4","Ifit1","Oasl2","Rtp4","Slfn5")
+markers$EMPNrg1 <- c("Nrg1","Alox5ap","Gm4779","Adgrg3","Cd34","Bcl11a","Mpo","Tox","8030474K03Rik")
+markers$EMPIl17ra <- c("Il17ra","Cd52","Cacnb2","Ramp1","Prtn3","Lpcat2","Coro2a","Cytip","Hp")
+markers$EMPCcl4 <- c("Ccl4","Ccl3","Lpl","Apbb1ip")
+markers$EMPSepp1 <- c("Sepp1","C1qa","Fcgr3","Lyz2","Ms4a6b","Ms4a6c")
+
+# Convert list to a dataframe with genes merged into a single cell
+vector_names <- names(markers)
+merged_genes <- sapply(markers, function(x) paste(x, collapse = ", "))
+
+# Create dataframe
+df <- data.frame(VectorName = vector_names, Genes = merged_genes, stringsAsFactors = FALSE)
+
+vec<-unlist(markers)
+vec_uniq <- unique(vec)
+
+fig_dot_1 <-
+  DotPlot(cmo, features = vec_uniq[1:123])+ 
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))+
+  coord_flip()+xlab("")+ylab("") +coord_flip() +NoLegend()+
+  geom_vline(xintercept=c(18.5,41.5,63.5,83.5,106.5), color = "grey")+xlab("")+ ylab("")
+fig_dot_2 <- DotPlot(cmo, features = vec_uniq[124:238])+ 
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1)) +
+  coord_flip()+xlab("")+ylab("")+ geom_vline(xintercept=c(20.5,38.5,61.5,78.5,98.5),
+                                             color = "grey")+NoLegend() +coord_flip()
+fig_dot_1
+fig_dot_2
+```
+
+
+```{r eval=FALSE}
+DotPlot(cmo, features =c("Zfp42","Pim2","T","Tacstd2","Sfn","Cldn3","Anxa1","Dnd1","Mesp1","Sox17", "Fgf5","Ttr","Mixl1","Hoxb2","Fgf15","Cacna1d",
+						  "Nrxn3","Stard8","Upk3b","Plxna4","Hoxa9","Greb1","Dach1","Actc1","Igfbp7","Wnt2","Fgf12",
+						  "Ifit1","Tal1","Gypa","Hba-a1","Hba-a2","Alas2","Plek","Fermt3","Vwf","Icam2","Gadd45g","Cdh5",
+						  "Cyp26b1","Rsad2","Ptprc","Nrg1","Il17ra","Ccl4","Sepp1"), group.by = "cl_3")+ theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1,size = 15))+  
+	geom_rect(aes(xmin = 14 - 0.5, xmax = 20 + 0.5, ymin = 12 - 0.5, ymax = 17 + 0.5), fill = "transparent", color = "green", size = 0.5)+
+	geom_rect(aes(xmin = 21 - 0.5, xmax = 27 + 0.5, ymin = 18 - 0.5, ymax = 23 + 0.5), fill = "transparent", color = "yellow", size = 0.5)+  
+	geom_rect(aes(xmin = 29 - 0.5, xmax = 33 + 0.5, ymin = 25 - 0.5, ymax = 29 + 0.5), fill = "transparent", color = "red", size = 0.5)+  
+	geom_rect(aes(xmin = 34 - 0.5, xmax = 36 + 0.5, ymin = 30 - 0.5, ymax = 32 + 0.5), fill = "transparent", color = "blue", size = 0.5)+  
+	geom_rect(aes(xmin = 37 - 0.5, xmax = 41 + 0.5, ymin = 33 - 0.5, ymax = 36 + 0.5), fill = "transparent", color = "orange", size = 0.5)+  
+	geom_rect(aes(xmin = 42 - 0.5, xmax = 46 + 0.5, ymin = 37 - 0.5, ymax = 40 + 0.5), fill = "transparent", color = "purple", size = 0.5)+  
+	geom_rect(aes(xmin = 4 - 0.5, xmax = 7 + 0.5, ymin = 4 - 0.5, ymax = 6 + 0.5), fill = "transparent", color = "lightgrey", size = 0.5)+  
+	geom_rect(aes(xmin = 10 - 0.5, xmax = 12 + 0.5, ymin = 9- 0.5, ymax = 10 + 0.5), fill = "transparent", color = "darkgrey", size = 0.5)+xlab("")+ylab("")+ theme(legend.position="bottom")
+```
+
+
+```{r eval=FALSE}
+cl4l <- levels(cmo$cl_3)
+cl4l2 <- levels(cmo$cl_2)
+cl4l1 <- levels(cmo$cl_1)
+ccpl <- levels(cmo$Phasel)
+cl4l
+ccpl
+cl4l2
+cl4l1
+
+cc_speckle_cl3 <- plotCellTypeProps(sample = cmo$cl_3, clusters = cmo$Phasel)+ theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1))+ scale_x_discrete(limits=cl4l)+xlab("") +    geom_hline(yintercept=c(), color = "grey")+
+  scale_fill_manual("Cell Cycle",values = r3dcol$c3,limits=ccpl)+ylab("")
+cc_speckle_cl2 <- plotCellTypeProps(sample = cmo$cl_2, clusters = cmo$Phasel)+ theme(axis.text.x = element_text(angle = 35, vjust = 1, hjust=1))+ scale_x_discrete(limits=cl4l2)+xlab("") +    geom_hline(yintercept=c(), color = "grey") +
+  scale_fill_manual("Cell Cycle",values = r3dcol$c3,limits=ccpl)+ylab("")+NoLegend()
+cc_speckle_cl1 <- plotCellTypeProps(sample = cmo$cl_1, clusters = cmo$Phasel)+ theme(axis.text.x = element_text(angle = 35, vjust = 1, hjust=1))+ scale_x_discrete(limits=cl4l1)+xlab("") +    geom_hline(yintercept=c(), color = "grey")+ 
+  scale_fill_manual("Cell Cycle",values = r3dcol$c3,limits=ccpl)+ylab("")+NoLegend()
+
+
+cc_speckle_cl1
+cc_speckle_cl2
+cc_speckle_cl3
+
+```
+
+
+
+## Descriptive Statistics
+
+| Col1  | SoupX % | SoupX rho | scDblF. thrshld | scDblF. % | scDblF. singlet | scDblF. doublet | scDblF. \>0.25 s | scDblF. \>0.25 d |
+|-------|---------|-----------|-----------------|-----------|-----------------|-----------------|------------------|------------------|
+| Lane1 | 95.0    | 0.05      | 0.382           | 8.1       | 14610           | 1285            |                  |                  |
+| Lane2 | 95.4    | 0.05      | 0.37            | 7.6       | 14354           | 1186            |                  |                  |
+| Lane3 | 93.6    | 0.06      | 0.378           | 8.4       | 14982           | 1377            |                  |                  |
+| Lane4 | 93.6    | 0.06      | 0.326           | 8.9       | 16395           | 1599            |                  |                  |
+| Lane5 | 94.4    | 0.06      | 0.384           | 9.5       | 16729           | 1763            |                  |                  |
+| Lane0 |         |           |                 |           | 77070           | 7210            | 76099            | 8181             |
+
+84280 - 13173 = 71107 cells . We removed singlets from the intersection of the HTODemux and CellRanger, MAD3,
+scDblFinder \> 0.25. We did not use nFeature_RNA/nCount_RNA; we observed that Erythroid cells fall in this group due to
+their different expression profile, which is high expression of less variable genes.
+
+IDs of these 71107 cells are also available as a kept_cells.txt file.
+
+# Conclusion
+
+1.  For Data Cleaning, we perform.
+
+    1.  Low-quality cell removal with MAD-5 than later with MAD-3
+
+        1.  We used the first MAD-5 because some noise was required for downstream analysis. After completing those
+            steps, we removed the remaining low-quality cells with MAD-3.
+
+    2.  Doublet detection and removal are done with scDblFinder. We used *the 20%* expected doublet ratio. Estimated
+        doublet ratios are 7.6-9.5%. It is a low ratio in these numbers of cells. One explanation for this is that
+        multiplets (greater than 3 CMO) removed in previous steps may cause this. The software's thresholds are between
+        0.326 and 0.384. In order to be more strict, we set the threshold manually to *0.25,* which resulted in the
+        removal of an extra \~1K cells.
+
+    3.  Ambient RNA removal has been conducted with SoupX using default settings since the relatively long waiting steps
+        between harvest and droplet formation (due to sample numbers, CMO labeling protocol, and recounting) might
+        increase cell rupture and ambient RNA for specific cell types. We see *hemoglobin* and some *early
+        naive* markers among the genes with a high presence in ambient RNA.
+
+    4.  Clusters consist heavily of doublets, and the high proportions of their cells that were lost are also removed
+        from the data.
+
+    5.  nFeature_RNA/nCount_RNA ratio 0.9 is not used for filtration because some cell types biologically fall into this
+        group (Erythroid Cells).
+
+2.  For ease of downstream analysis, we clustered the data into three levels: groups, clusters, and subclusters (level
+    3).
+
+3.  Due to the difficulty of finding cell type annotation in Late Mesodermal lineages, we use Hox genes as annotation
+    helpers. Late mesodermal subclusters are divided into Hoxa+ or Hoxb+ populations, and each cluster's identifiable
+    markers/features are used to name that subcluster.
+
+4.  Naming the subclusters, marker genes, or guessed maturation grade is used to help with naming the subclusters.
+
+5.  Subcluster naming is confusing and difficult to track. The reasons that we choose this way;
+
+    1.  Difficulty identifying Late Mesodermal lineages
+
+    2.  Continuous differentiation Nature of differentiation
+
+    3.  Invitro differentiation might have differences in gene expression compared to in vivo data sets.
+
+    4.  KO affected art effect clusters (stalled? clusters)
+
+6.  Cell cycle regression has been conducted due to its substantial effect on the late mesodermal lineage clustering.
+    One worry was the effect on the biological cell cycle differences due to the cellular state; we did not catch any
+    significant difference in terminal differentiation and naive states. Erythroid cells are in G1 with a correlation in
+    their maturation; naive ES cells still have a short G1 phase.
+
+    1.  As an observation, subclusters further in the maturation/differentiation process have higher cell proportions in
+        the G1 phase.
+
+7.  Based on the filtered cell numbers, the lowest cell counts per sample are \~5K.
+
+# Session Info
+
+```{r eval=FALSE}
+sessionInfo()
+```
+
+I am leaving a .txt files which shows IDs of the cells which has been kept called "kept_cells.zip" either in github or GSE.
+
+
+
+
+

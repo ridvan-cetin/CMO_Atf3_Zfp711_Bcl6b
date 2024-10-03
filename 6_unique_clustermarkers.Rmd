@@ -1,0 +1,78 @@
+---
+title: "Unique Clusters Marker Search"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+```
+
+
+We observed there are three small clusters/populations. Due to limitations of the cell numbers, we cannot get proper DESeq2 results from pseudbulked data. For this reason we will use seurat for finding markers.
+
+# baIfit1
+
+```{r}
+s_cmo$ident <- s_cmo$cl_2
+Idents(s_cmo) <- "cl_2"
+baIfit1_cmo_CvsN_3 <- FindMarkers(s_cmo, ident.1 = "Mesoderm_Ifit1" ,ident.2 = c("Mesoderm_Hoxb","Mesoderm_Hoxa"),min.pct=0,logfc.threshold=0  )
+```
+```{r}
+# Replace p_val_adj values of 0 with a very small number
+baIfit1_cmo_CvsN_3$p_val_adj[baIfit1_cmo_CvsN_3$p_val_adj == 0] <- 1e-300
+# Replace p_ values of 0 with a very small number
+baIfit1_cmo_CvsN_3$p_val[baIfit1_cmo_CvsN_3$p_val == 0] <- 1e-300
+```
+
+## adding ranking column (which partially tries to mimic the stat values from DESeq2)
+
+```{r}
+baIfit1_cmo_CvsN_3$statlike <-  sign(baIfit1_cmo_CvsN_3$avg_log2FC)*(-log10(baIfit1_cmo_CvsN_3$p_val))
+```
+
+# EndRsad2
+```{r}
+s_cmo$ident <- s_cmo$cl_3
+Idents(s_cmo) <- "cl_3"
+EndRsad2_cmo_CvsN_3 <- FindMarkers(s_cmo, ident.1 = "EndRsad2" ,ident.2 = c("EndGadd45g","EndCdh5","EndCyp26b1"),min.pct=0,logfc.threshold=0  )
+```
+
+```{r}
+# Replace p_val_adj values of 0 with a very small number
+EndRsad2_cmo_CvsN_3$p_val_adj[EndRsad2_cmo_CvsN_3$p_val_adj == 0] <- 1e-300
+# Replace p_ values of 0 with a very small number
+EndRsad2_cmo_CvsN_3$p_val[EndRsad2_cmo_CvsN_3$p_val == 0] <- 1e-300
+```
+
+## adding ranking column (which partially tries to mimic the stat values from DESeq2)
+```{r}
+EndRsad2_cmo_CvsN_3$statlike <-  sign(EndRsad2_cmo_CvsN_3$avg_log2FC)*(-log10(EndRsad2_cmo_CvsN_3$p_val))
+```
+
+# EndCyp26b1
+```{r}
+s_cmo$ident <- s_cmo$cl_3
+Idents(s_cmo) <- "cl_3"
+EndCyp26b1_cmo_CvsN_3 <- FindMarkers(s_cmo, ident.1 = "EndCyp26b1" ,ident.2 = c("EndGadd45g","EndCdh5","EndRsad2" ),min.pct=0,logfc.threshold=0  )
+```
+
+```{r}
+# Replace p_val_adj values of 0 with a very small number
+EndCyp26b1_cmo_CvsN_3$p_val_adj[EndCyp26b1_cmo_CvsN_3$p_val_adj == 0] <- 1e-300
+# Replace p_ values of 0 with a very small number
+EndCyp26b1_cmo_CvsN_3$p_val[EndCyp26b1_cmo_CvsN_3$p_val == 0] <- 1e-300
+```
+
+```{r}
+EndCyp26b1_cmo_CvsN_3$statlike <-  sign(EndCyp26b1_cmo_CvsN_3$avg_log2FC)*(-log10(EndCyp26b1_cmo_CvsN_3$p_val))
+```
+
+
+```{r}
+sessionInfo()
+```
+
+
+

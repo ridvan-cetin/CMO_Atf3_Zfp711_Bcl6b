@@ -1,0 +1,463 @@
+---
+title: "Differential Abundance Analysis with Speckle"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+DISCLAMIR:
+I am summarizing my code here, so there might be typos or copy paste errors. This is more like a detailed index page.
+
+
+```{r eval=FALSE,}
+r3dcol <- list()
+r3dcol$cols_94 <- c(
+  "#F0E442","#1CE6FF","#FF34FF","#FF4A46","#008941","#006FA6","#A30059","#FFDBE5","#7A4900","#0089A3",
+  "#63FFAC","#B79762",
+  "#004D43","#8FB0FF","#997D87","#809693","#6A3A4C","#b4b701","#4FC601","#3B5DFF","#FF2F80","#61615A",
+  "#BA0900","#6B7900",
+  "#00C2A0","#FFAA92","#FF90C9","#B903AA","#D16100","#922329","#7B4F4B","#A1C299","#0AA6D8","#00846F",
+  "#FFB500","#C2FFED",
+  "#A079BF","#CC0744","#C0B9B2","#C2FF99","#00489C","#6F0062","#0CBD66","#EEC3FF","#456D75","#B77B68",
+  "#7A87A1","#788D66",
+  "#885578","#FAD09F","#FF8A9A","#D157A0","#BEC459","#456648","#0086ED","#886F4C","#34362D","#B4A8BD",
+  "#00A6AA","#452C2C",
+  "#636375","#A3C8C9","#FF913F","#938A81","#575329","#00FECF","#B05B6F","#8CD0FF","#3B9700","#04F757",
+  "#C8A1A1","#1E6E00",
+  "#7900D7","#A77500","#6367A9","#A05837","#6B002C","#772600","#D790FF","#9B9700","#549E79","#FFF69F",
+  "#201625","#72418F",
+  "#BC23FF","#99ADC0","#3A2465","#DDEFFF","#5B4534","#FDE8DC","#404E55","#CB7E98","#A4E804","#324E72"
+)
+r3dcol$cols_46 <- c(
+  "#FFB500","#00C2A0","#D157A0","#8CD0FF","#FF4A46","#FDE8DC","#63FFAC","#B79762","#8FB0FF","#997D87",
+  "#809693","#b4b701",
+  "#4FC601","#FFAA92","#FF90C9","#A1C299","#F0E442","#C2FFED","#A079BF","#C0B9B2","#C2FF99","#EEC3FF",
+  "#B77B68","#7A87A1",
+  "#788D66","#FAD09F","#FF8A9A","#BEC459","#B4A8BD","#A3C8C9","#FF913F","#938A81","#00FECF","#FF34FF",
+  "#1CE6FF","#04F757",
+  "#C8A1A1","#D790FF","#9B9700","#549E79","#FFF69F","#99ADC0","#DDEFFF","#FFDBE5","#CB7E98","#A4E804"
+)
+r3dcol$cols_pjsala <- c(
+  "#005579","#0F4A9C","#139992","#1A1A1A","#354E23","#3F84AA","#532C8A","#635547","#647a4f","#65A83E",
+  "#7F6874","#8870ad",
+  "#8DB5CE","#8EC792","#989898","#9e6762","#B51D8D","#c19f70","#C3C388","#C594BF","#C72228","#c9a997",
+  "#C9EBFB","#cc7818",
+  "#CDE088","#DABE99","#DFCDE4","#EF4E22","#EF5A9D","#F397C0","#F6BFCB","#f79083","#f7f79e","#f9decf",
+  "#FACB12","#FBBE92",
+  "#ff891c"
+)
+r3dcol$cols_4x3 <- c(
+  "#551153","#970098","#9c24cd","#412c00","#997600","#c6a000","#1e3604","#355e07","#4f890e","#002f64",
+  "#0050ae","#1077f3"
+)
+r3dcol$cols_12x1 <- c(
+  '#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a',
+  '#ffff99','#b15928'
+)
+r3dcol$cols_4x3b <- c(
+  "#551153","#970098","#cc34cd","#c85b00","#f98517","#fdbf6f","#00603d","#008c5c","#33b983","#002f64",
+  "#0050ae","#1077f3"
+)
+r3dcol$cols_4x1 <- c(
+  "#970098","#997600","#4f890e","#0050ae"
+)
+r3dcol$cols_4x1b <- c(
+  "#970098","#f98517","#008c5c","#1077f3"
+)
+r3dcol$cols_3a <- c(
+  "#D157A0","#FFB500","#00C2A0"
+)
+r3dcol$cols_3b <- c(
+  "#D454B5","#c85b00","#008c5c"
+)
+```
+
+```{r eval=FALSE}
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(miloR)
+  library(dplyr)
+  library(scater)
+  library(speckle)
+  library(ggplot2)
+})
+```
+
+# Introduction
+
+Here we will summarize the steps of the Compositional Analysis / Differential Abundance Analysis between KO clones and
+NT-Control (NonTargetting Control). We will do it in two different analysis 1) cluster levels with *Speckle* and 2)
+k-nearstneighborhood with smaller groups of cells.
+
+# Data Preprocessing
+
+## Loading Data
+
+
+```{r eval=FALSE}
+cmo <- readRDS("~/cmo_chapter/introduction/rds/cmoy2.RDS")
+Idents(cmo) <- "Conditions_lv"
+
+# subsetting with each KO and Control
+cmo_CA <- subset(cmo, idents =c("Control","Atf3KO"))
+cmo_BA <- subset(cmo, idents =c("Control","Bcl6bKO"))
+cmo_ZA <- subset(cmo, idents =c("Control","Zfp711KO"))
+
+# we have to clean the levels for with following code
+clean_metadata <- function(seurat_obj) {
+  metadata <- seurat_obj@meta.data
+  # Apply droplevels to each factor column
+  metadata[] <- lapply(metadata, function(column) {
+    if (is.factor(column)) {
+      return(droplevels(column))
+    } else {
+      return(column)
+    }
+  })
+  seurat_obj@meta.data <- metadata
+  return(seurat_obj)
+}
+
+cmo_CA <- clean_metadata(cmo_CA)
+cmo_BA <- clean_metadata(cmo_BA)
+cmo_ZA <- clean_metadata(cmo_ZA)
+```
+
+I will show only one condition (Atf3-KO versus NT-Control).
+We will first follow the classical "speckle" pipeline during the analysis. Later I will subset the samples to equal cell numbers and use the plotCellTypeProps function to compare KO and NT conditions at annotation level. 
+
+
+# Atf3
+
+## Loading the RDS file
+
+```{r}
+cmo_CA <- readRDS("../../../RDS/CMO/cmo_CA.RDS")
+```
+
+## just to be sure
+if you are subsetting the data and loosing some of the levels use droplevels() before running speckle and miloR
+e.g.
+```{r}
+cmo_CA$Conditions_lv <- droplevels(cmo_CA$Conditions_lv)
+```
+
+
+
+```{r}
+c_ca_4 <- levels(cmo_CA$cl_4) # ordered subcluster-cell cycle annotation (jus t for fun)
+c_ca_3 <- levels(cmo_CA$cl_3) # ordered subcluster annotation
+c_ca_2 <- levels(cmo_CA$cl_2) # ordered cluster annotation
+c_ca_1 <- levels(cmo_CA$cl_1) #  ordered group annotation
+c_ca_cc <- levels(cmo_CA$Phasel) # ordered cell cycle annotation
+c_ca_conditions <- levels(cmo_CA$Conditions_lv)  # Conditions (Atf3-KO and NT-Control)
+c_ca_samples <- levels(cmo_CA$Samples_lv) # Replicates
+```
+
+```{r}
+Idents(cmo_CA) <- "cl_3"
+```
+
+# Propeller
+
+we will do DAA the test now in 5 levels (cl_1, ...) in both "asin" and "logit" tranformation. You can find the results in the supplementary table.
+
+
+### Asin&logit
+
+
+
+```{r}
+prop_CA <- list()
+prop_CA$S1a <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+prop_CA$S2a <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+prop_CA$S3a <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+prop_CA$S4a <- propeller(clusters = cmo_CA$cl_4, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+prop_CA$S5a<- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+
+prop_CA$S1l <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+prop_CA$S2l <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+prop_CA$S3l <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+prop_CA$S4l <- propeller(clusters = cmo_CA$cl_4, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+prop_CA$S5l<- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+
+```
+
+
+```{r}
+ca1_asin <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+ca2_asin <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+ca3_asin <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+cacc_asin <- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "asin")
+```
+
+```{r}
+ca1_logit <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+ca2_logit <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+ca3_logit <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+cacc_logit <- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, group = cmo_CA$Conditions_lv,transform = "logit")
+```
+
+
+```{r}
+write.table(ca1_asin, "./Atf3/Atf3_propeller_groups_asin.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca2_asin, "./Atf3/Atf3_propeller_clusters_asin.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca3_asin, "./Atf3/Atf3_propeller_subclusters_asin.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(cacc_asin, "./Atf3/Atf3_propeller_cellcycle_asin.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+```
+
+```{r}
+write.table(ca1_logit, "./Atf3/Atf3_propeller_groups_logit.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca2_logit, "./Atf3/Atf3_propeller_clusters_logit.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca3_logit, "./Atf3/Atf3_propeller_subclusters_logit.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(cacc_logit, "./Atf3/Atf3_propeller_cellcycle_logit.txt",sep = '\t', row.names = F, col.names = T, quote = F)
+```
+
+
+```{r,fig.width=6.5, fig.height=5.5}
+plot_cell_type_normal_1 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_1, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right"  ,
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_conditions) +
+  scale_fill_manual(
+    "Groups", 
+    values = c("#66c2a5","#fc8d62","#8da0cb"),
+    guide = guide_legend(ncol = 1)  # Ensure the legend is in one column
+  )+ geom_vline(xintercept = c(3.5,6.5,9.5), linewidth=0.2,color="black")
+
+print(plot_cell_type_normal_1)
+```
+
+```{r,fig.width=6.5, fig.height=5.5}
+plot_cell_type_normal_2 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_2, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right"  ,
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_conditions) +
+  scale_fill_manual(
+    "Clusters (A-Z)", 
+    values = r3dcol$cols_46,
+    guide = guide_legend(ncol = 1)  # Ensure the legend is in one column
+  )+ geom_vline(xintercept = c(3.5,6.5,9.5), linewidth=0.2,color="black")
+
+print(plot_cell_type_normal_2)
+```
+
+```{r,fig.width=6.5, fig.height=5.5}
+plot_cell_type_normal_3 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_3, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right"  ,
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_conditions) +
+  scale_fill_manual(
+    "Subclusters (A-Z)", 
+    values = r3dcol$cols_46,
+    guide = guide_legend(ncol = 2)  # Ensure the legend is in one column
+  )+ geom_vline(xintercept = c(3.5,6.5,9.5), linewidth=0.2,color="black")
+
+print(plot_cell_type_normal_3)
+```
+
+```{r,fig.width=14, fig.height=5.5}
+plot_cell_type_normal_4 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_4, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right"  ,
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_conditions) +
+  scale_fill_manual(
+    "subclusters-cc (A-Z)", 
+    values = c(r3dcol$cols_94,r3dcol$cols_46),
+    guide = guide_legend(ncol = 6)  # Ensure the legend is in one column
+  )+ geom_vline(xintercept = c(3.5,6.5,9.5), linewidth=0.2,color="black")
+
+print(plot_cell_type_normal_4)
+```
+
+
+# equal cell numbers & filipped axis on plotCellTypeProps
+
+In order to have each sample has equal cell number, we will take equal number of cells from each sample.
+
+```{r}
+Idents(cmo_CA) <- "Samples_lv"
+```
+
+```{r}
+table(Idents(cmo_CA))
+min(table(Idents(cmo_CA)))
+```
+
+```{r}
+ # Downsample the number of cells per identity class
+subset_cmo_CA <-subset(x = cmo_CA, downsample = 4954)
+table(Idents(subset_cmo_CA))
+```
+
+```{r}
+levels(subset_cmo_CA)
+Idents(subset_cmo_CA) <- "Conditions"
+levels(subset_cmo_CA)
+```
+```{r}
+new.cluster.ids <- c("b_Atf3KO","a_Control")
+names(new.cluster.ids) <- levels(subset_cmo_CA)
+subset_cmo_CA <- RenameIdents(subset_cmo_CA, new.cluster.ids)
+subset_cmo_CA$conditionsxx <- Idents(subset_cmo_CA)
+```
+
+```{r,fig.width=4.5, fig.height=7}
+# Load necessary libraries
+pp1 <-
+  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$cl_1) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
+    axis.text.y = element_text(size = 7),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 10, margin = margin(l = 1)),
+    legend.title = element_text(size = 0, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l = -10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_1) +  
+  scale_fill_manual(values = c( "#009E73","#E69F00"), breaks = c("a_Control", "b_Atf3KO"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
+pp1
+```
+
+
+```{r,fig.width=9, fig.height=7}
+# Load necessary libraries
+pp2 <-
+  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$cl_2) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
+    axis.text.y = element_text(size = 7),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 10, margin = margin(l = 1)),
+    legend.title = element_text(size = 0, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l = -10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_2) +  
+  scale_fill_manual(values = c( "#009E73","#E69F00"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
+pp2
+```
+
+
+```{r,fig.width=9, fig.height=7}
+# Load necessary libraries
+pp3 <-
+  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$cl_3) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
+    axis.text.y = element_text(size = 7),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 10, margin = margin(l = 1)),
+    legend.title = element_text(size = 0, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l = -10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_3) +  
+  scale_fill_manual(values = c( "#009E73","#E69F00"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
+pp3
+```
+
+
+
+```{r,fig.width=9, fig.height=7}
+# Load necessary libraries
+pp4 <-
+  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$Phase) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
+    axis.text.y = element_text(size = 7),
+    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
+    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
+    legend.text = element_text(size = 10, margin = margin(l = 1)),
+    legend.title = element_text(size = 0, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l = -10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits=c("G1","S","G2M")) +  
+  scale_fill_manual(values = c( "#009E73","#E69F00"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
+pp4
+```
+
+
+
+```{r,fig.width=20,fig.height=10}
+plot_grid(
+ pp1,
+ pp2,
+ pp3,
+ pp4,
+ ncol = 4,rel_widths = c(4,15,33,4),align = "h")
+```
+
+```{r}
+ggsave("./Atf3/plotCellTypeProps_flipped_new_1.png",width = 20,height = 4.8, units = "in",dpi = 900)
+ggsave("./Atf3/plotCellTypeProps_flipped_new_1.pdf",width = 20,height = 4.8, units = "in",dpi = 900)
+ggsave("./Atf3/plotCellTypeProps_flipped_new_1.svg",width = 20,height = 4.8, units = "in",dpi = 900)
+```
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
