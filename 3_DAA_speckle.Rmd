@@ -309,141 +309,299 @@ plot_cell_type_normal_4 <-
 
 print(plot_cell_type_normal_4)
 ```
+# We will create one to one comparison plots
 
+Doing some naming adjustment, (Naive and PGC has same naming in clusters and subclusters)
 
-# equal cell numbers & filipped axis on plotCellTypeProps
-
-In order to have each sample has equal cell number, we will take equal number of cells from each sample.
 
 ```{r}
-Idents(cmo_CA) <- "Samples_lv"
+cmo <- readRDS("~/PhD_Projects/CMO/cmoy2_reup.RDS")
 ```
 
 ```{r}
-table(Idents(cmo_CA))
-min(table(Idents(cmo_CA)))
+cmo
+```
+```{r}
+levels(cmo$cl_3)
+lvx <- levels(cmo$cl_3)
 ```
 
 ```{r}
- # Downsample the number of cells per identity class
-subset_cmo_CA <-subset(x = cmo_CA, downsample = 4954)
-table(Idents(subset_cmo_CA))
+Idents(cmo) <- "cl_3"
+```
+
+
+```{r}
+new.cluster.ids <- c("Naiv", lvx[2:6],"PGCs",lvx[-c(1:7)])
+new.cluster.ids
+
 ```
 
 ```{r}
-levels(subset_cmo_CA)
-Idents(subset_cmo_CA) <- "Conditions"
-levels(subset_cmo_CA)
+names(new.cluster.ids) <- levels(cmo)
+cmo <- RenameIdents(cmo, new.cluster.ids)
 ```
 ```{r}
-new.cluster.ids <- c("b_Atf3KO","a_Control")
-names(new.cluster.ids) <- levels(subset_cmo_CA)
-subset_cmo_CA <- RenameIdents(subset_cmo_CA, new.cluster.ids)
-subset_cmo_CA$conditionsxx <- Idents(subset_cmo_CA)
+table(Idents(cmo))
+```
+```{r}
+cmo$cl_3 <- Idents(cmo)
 ```
 
-```{r,fig.width=4.5, fig.height=7}
-# Load necessary libraries
-pp1 <-
-  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$cl_1) +
-  theme_classic() + 
+
+```{r}
+library(speckle)
+```
+```{r}
+daa <- list()
+```
+
+
+```{r}
+daa$cmo_groups_logit <- propeller(clusters=cmo$cl_1, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "logit")
+daa$cmo_groups_asin <- propeller(clusters=cmo$cl_1, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "asin")
+daa$cmo_clusters_logit <- propeller(clusters=cmo$cl_2, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "logit")
+daa$cmo_clusters_asin <- propeller(clusters=cmo$cl_2, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "asin")
+daa$cmo_subclusters_logit <- propeller(clusters=cmo$cl_3, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "logit")
+daa$cmo_subclusters_asin <- propeller(clusters=cmo$cl_3, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "asin")
+daa$cmo_cellcycle_logit <- propeller(clusters=cmo$Phasel, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "logit")
+daa$cmo_cellcycle_asin <- propeller(clusters=cmo$Phasel, sample=cmo$Samples_lv, group=cmo$Conditions_lv, transform = "asin")
+```
+
+```{r}
+daa$cmo_groups_logit
+daa$cmo_groups_asin
+daa$cmo_clusters_logit
+daa$cmo_clusters_asin
+daa$cmo_subclusters_logit
+daa$cmo_subclusters_asin
+```
+
+```{r}
+lv_subclusters <- levels(cmo$cl_3)
+lv_clusters <- levels(cmo$cl_2)
+lv_groups <- levels(cmo$cl_1)
+lv_cellcycle <- levels(cmo$Phasel)
+```
+
+## merging results of different levels to one 
+
+```{r}
+daa$cmo_all <- rbind(daa$cmo_groups_logit, daa$cmo_clusters_logit,daa$cmo_subclusters_logit, daa$cmo_cellcycle_logit)
+```
+
+```{r}
+daa$cmo_all
+```
+
+```{r}
+lv_all <- c(lv_groups,lv_clusters, lv_subclusters, lv_cellcycle)
+```
+```{r}
+lv_all
+```
+
+```{r}
+duplicated(lv_all)
+```
+
+
+```{r,fig.width=20, fig.height=4.8}
+# Start with the initial dataframe and add observation labels from row names
+difference_data <- daa$cmo_all %>%
+  mutate(Observation = rownames(daa$cmo_all)) %>%
+  select(Observation, Control = PropMean.Control, Atf3KO = PropMean.Atf3KO) %>% # Ensure correct column selection
+  mutate(
+    Total = Control + Atf3KO,           # Calculate total proportion per observation
+    Control = Control / Total,          # Normalize Control
+    Atf3KO = Atf3KO / Total             # Normalize Atf3KO
+  ) %>%
+  select(-Total) %>%
+  pivot_longer(cols = c(Control, Atf3KO), 
+               names_to = "Group", 
+               values_to = "Proportion") %>%
+  pivot_wider(names_from = Group, values_from = Proportion) %>%
+  mutate(
+    Difference = Atf3KO - Control,      # Calculate difference as Atf3KO - Control
+    Observation = factor(Observation, levels = lv_all) # Apply custom order
+  )
+
+# Positions for dividers (as indices in lv_all)
+divider_positions <- c(3, 18, 58)
+
+# Create the bar plot with proper ordering, dividers, and legend inside
+ggplot(difference_data, aes(x = Observation, y = Difference, fill = Difference > 0)) +
+  geom_bar(stat = "identity", width = 0.6, color = "black") + # Add black border for clarity
+  geom_vline(xintercept = divider_positions + 0.5, linetype = 1, color = "grey20", size = 0.8) + # Add dividers
+  scale_fill_manual(
+    values = c("TRUE" = viridis(5)[5], "FALSE" = viridis(5)[1]), # Colorblind-friendly colors
+    name = "Comparison",
+    labels = c("Control Higher", "Atf3-KO Higher") # Adjusted labels
+  ) +
+  labs(
+    title = "Relative Difference Between Cell Type Abundance of Atf3-KO and Control",
+    subtitle = "Normalized proportions across cell type annotations",
+    x = NULL, # Remove the x-axis title
+    y = "Difference (Atf3KO - Control)"
+  ) +
+  theme_classic(base_size = 17) + # Increase base font size for better readability
   theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
-    axis.text.y = element_text(size = 7),
-    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
-    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
-    legend.text = element_text(size = 10, margin = margin(l = 1)),
-    legend.title = element_text(size = 0, hjust = 0.5),
-    legend.position = "right",
-    legend.box.margin = margin(l = -10, unit = "pt")
-  ) + 
-  scale_x_discrete(limits = c_ca_1) +  
-  scale_fill_manual(values = c( "#009E73","#E69F00"), breaks = c("a_Control", "b_Atf3KO"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
-pp1
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "plain"), # Rotate and bold labels
+    axis.text.y = element_text(face = "plain"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16), # Center the title
+    plot.subtitle = element_text(hjust = 0.5, face = "italic", size = 12), # Add subtitle
+    legend.position = c(1, 1.27), # Top-right inside the plot area
+    legend.justification = c("right", "top"), # Align legend to the top-right corner
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    legend.background = element_blank() # Add white background and border
+  ) +
+  guides(fill = guide_legend(reverse = TRUE)) # Reverse legend order
+```
+```{r}
+ggsave("./atf3_new_propeller.png",width = 20, height = 5,units = "in",dpi = 600)
+ggsave("./atf3_new_propeller.pdf",width = 20, height = 5,units = "in",dpi = 600)
+ggsave("./atf3_new_propeller.svg",width = 20, height = 5,units = "in",dpi = 600)
 ```
 
 
-```{r,fig.width=9, fig.height=7}
-# Load necessary libraries
-pp2 <-
-  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$cl_2) +
-  theme_classic() + 
+
+```{r,fig.width=20, fig.height=4.8}
+# Start with the initial dataframe and add observation labels from row names
+difference_data <- daa$cmo_all %>%
+  mutate(Observation = rownames(daa$cmo_all)) %>%
+  select(Observation, Control = PropMean.Control, Zfp711KO = PropMean.Zfp711KO) %>% # Ensure correct column selection
+  mutate(
+    Total = Control + Zfp711KO,           # Calculate total proportion per observation
+    Control = Control / Total,          # Normalize Control
+    Zfp711KO = Zfp711KO / Total             # Normalize Zfp711KO
+  ) %>%
+  select(-Total) %>%
+  pivot_longer(cols = c(Control, Zfp711KO), 
+               names_to = "Group", 
+               values_to = "Proportion") %>%
+  pivot_wider(names_from = Group, values_from = Proportion) %>%
+  mutate(
+    Difference = Zfp711KO - Control,      # Calculate difference as Zfp711KO - Control
+    Observation = factor(Observation, levels = lv_all) # Apply custom order
+  )
+
+# Positions for dividers (as indices in lv_all)
+divider_positions <- c(3, 18, 58)
+
+# Create the bar plot with proper ordering, dividers, and legend inside
+ggplot(difference_data, aes(x = Observation, y = Difference, fill = Difference > 0)) +
+  geom_bar(stat = "identity", width = 0.6, color = "black") + # Add black border for clarity
+  geom_vline(xintercept = divider_positions + 0.5, linetype = 1, color = "grey20", size = 0.8) + # Add dividers
+  scale_fill_manual(
+    values = c("TRUE" = viridis(5)[5], "FALSE" = viridis(5)[1]), # Colorblind-friendly colors
+    name = "Comparison",
+    labels = c("Control Higher", "Zfp711-KO Higher") # Adjusted labels
+  ) +
+  labs(
+    title = "Relative Difference Between Cell Type Abundance of Zfp711-KO and Control",
+    subtitle = "Normalized proportions across cell type annotations",
+    x = NULL, # Remove the x-axis title
+    y = "Difference (Zfp711KO - Control)"
+  ) +
+  theme_classic(base_size = 17) + # Increase base font size for better readability
   theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
-    axis.text.y = element_text(size = 7),
-    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
-    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
-    legend.text = element_text(size = 10, margin = margin(l = 1)),
-    legend.title = element_text(size = 0, hjust = 0.5),
-    legend.position = "right",
-    legend.box.margin = margin(l = -10, unit = "pt")
-  ) + 
-  scale_x_discrete(limits = c_ca_2) +  
-  scale_fill_manual(values = c( "#009E73","#E69F00"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
-pp2
-```
-
-
-```{r,fig.width=9, fig.height=7}
-# Load necessary libraries
-pp3 <-
-  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$cl_3) +
-  theme_classic() + 
-  theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
-    axis.text.y = element_text(size = 7),
-    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
-    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
-    legend.text = element_text(size = 10, margin = margin(l = 1)),
-    legend.title = element_text(size = 0, hjust = 0.5),
-    legend.position = "right",
-    legend.box.margin = margin(l = -10, unit = "pt")
-  ) + 
-  scale_x_discrete(limits = c_ca_3) +  
-  scale_fill_manual(values = c( "#009E73","#E69F00"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
-pp3
-```
-
-
-
-```{r,fig.width=9, fig.height=7}
-# Load necessary libraries
-pp4 <-
-  plotCellTypeProps(clusters = subset_cmo_CA$conditionsxx, sample = subset_cmo_CA$Phase) +
-  theme_classic() + 
-  theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 16),
-    axis.text.y = element_text(size = 7),
-    axis.title.x = element_blank(),  # Removing x-axis title since xlab is set to ""
-    axis.title.y = element_blank(),  # Removing y-axis title since ylab is set to ""
-    legend.text = element_text(size = 10, margin = margin(l = 1)),
-    legend.title = element_text(size = 0, hjust = 0.5),
-    legend.position = "right",
-    legend.box.margin = margin(l = -10, unit = "pt")
-  ) + 
-  scale_x_discrete(limits=c("G1","S","G2M")) +  
-  scale_fill_manual(values = c( "#009E73","#E69F00"))+geom_hline(yintercept = 0.5,linetype=2,color='red')+NoLegend()
-pp4
-```
-
-
-
-```{r,fig.width=20,fig.height=10}
-plot_grid(
- pp1,
- pp2,
- pp3,
- pp4,
- ncol = 4,rel_widths = c(4,15,33,4),align = "h")
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "plain"), # Rotate and bold labels
+    axis.text.y = element_text(face = "plain"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16), # Center the title
+    plot.subtitle = element_text(hjust = 0.5, face = "italic", size = 12), # Add subtitle
+    legend.position = c(1, 1.27), # Top-right inside the plot area
+    legend.justification = c("right", "top"), # Align legend to the top-right corner
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    legend.background = element_blank() # Add white background and border
+  ) +
+  guides(fill = guide_legend(reverse = TRUE)) # Reverse legend order
 ```
 
 ```{r}
-ggsave("./Atf3/plotCellTypeProps_flipped_new_1.png",width = 20,height = 4.8, units = "in",dpi = 900)
-ggsave("./Atf3/plotCellTypeProps_flipped_new_1.pdf",width = 20,height = 4.8, units = "in",dpi = 900)
-ggsave("./Atf3/plotCellTypeProps_flipped_new_1.svg",width = 20,height = 4.8, units = "in",dpi = 900)
+daa$cmo_clusters_logit
 ```
 
 
+
+```{r}
+ggsave("./zfp711_new_propeller.png",width = 20, height = 5,units = "in",dpi = 600)
+ggsave("./zfp711_new_propeller.pdf",width = 20, height = 5,units = "in",dpi = 600)
+ggsave("./zfp711_new_propeller.svg",width = 20, height = 5,units = "in",dpi = 600)
+```
+
+
+
+```{r,fig.width=20, fig.height=4.8}
+# Start with the initial dataframe and add observation labels from row names
+difference_data <- daa$cmo_all %>%
+  mutate(Observation = rownames(daa$cmo_all)) %>%
+  select(Observation, Control = PropMean.Control, Bcl6bKO = PropMean.Bcl6bKO) %>% # Ensure correct column selection
+  mutate(
+    Total = Control + Bcl6bKO,           # Calculate total proportion per observation
+    Control = Control / Total,          # Normalize Control
+    Bcl6bKO = Bcl6bKO / Total             # Normalize Bcl6bKO
+  ) %>%
+  select(-Total) %>%
+  pivot_longer(cols = c(Control, Bcl6bKO), 
+               names_to = "Group", 
+               values_to = "Proportion") %>%
+  pivot_wider(names_from = Group, values_from = Proportion) %>%
+  mutate(
+    Difference = Bcl6bKO - Control,      # Calculate difference as Bcl6bKO - Control
+    Observation = factor(Observation, levels = lv_all) # Apply custom order
+  )
+
+# Positions for dividers (as indices in lv_all)
+divider_positions <- c(3, 18, 58)
+
+# Create the bar plot with proper ordering, dividers, and legend inside
+ggplot(difference_data, aes(x = Observation, y = Difference, fill = Difference > 0)) +
+  geom_bar(stat = "identity", width = 0.6, color = "black") + # Add black border for clarity
+  geom_vline(xintercept = divider_positions + 0.5, linetype = 1, color = "grey20", size = 0.8) + # Add dividers
+  scale_fill_manual(
+    values = c("TRUE" = viridis(5)[5], "FALSE" = viridis(5)[1]), # Colorblind-friendly colors
+    name = "Comparison",
+    labels = c("Control Higher", "Bcl6b-KO Higher") # Adjusted labels
+  ) +
+  labs(
+    title = "Relative Difference Between Cell Type Abundance of Bcl6b-KO and Control",
+    subtitle = "Normalized proportions across cell type annotations",
+    x = NULL, # Remove the x-axis title
+    y = "Difference (Bcl6bKO - Control)"
+  ) +
+  theme_classic(base_size = 17) + # Increase base font size for better readability
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "plain"), # Rotate and bold labels
+    axis.text.y = element_text(face = "plain"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16), # Center the title
+    plot.subtitle = element_text(hjust = 0.5, face = "italic", size = 12), # Add subtitle
+    legend.position = c(1, 1.27), # Top-right inside the plot area
+    legend.justification = c("right", "top"), # Align legend to the top-right corner
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    legend.background = element_blank() # Add white background and border
+  ) +
+  guides(fill = guide_legend(reverse = TRUE)) # Reverse legend order
+```
+
+```{r}
+ggsave("./bcl6b_new_propeller.png",width = 20, height = 5,units = "in",dpi = 600)
+ggsave("./bcl6b_new_propeller.pdf",width = 20, height = 5,units = "in",dpi = 600)
+ggsave("./bcl6b_new_propeller.svg",width = 20, height = 5,units = "in",dpi = 600)
+```
+
+# saving 
+
+```{r}
+library(writexl)
+# Save to Excel
+write_xlsx(daa, path = "./daa_all.xlsx")
+```
 
 ```{r}
 sessionInfo()
