@@ -1,6 +1,6 @@
 ## Single-Cell Roadmap of Early Hemato-Endothelial Development: Roles of Atf3, Zfp711, And Bcl6b
 
-Ridvan Cetin<sup>1</sub>, Giulia Picco<sup>1</sub>, Jente van Staalduinen<sup>1</sub>, Eric Bindels<sup>2</sub>, Remco Hoogenboezem<sup>2</sub>, Gregory van Beek<sup>2</sub>, Mathijs Sanders<sup>2</sub>, Yaren Fidan<sup>1</sub>, Ahmet Korkmaz<sup>3</sub>, Joost Gribnau<sup>1,4</sub>, Jeffrey van Haren<sup>1</sub>, Danny Huylebroeck<sup>1</sub>, Eskeatnaf Mulugeta<sup>1</sub>, Frank Grosveld<sup>1,\±</sub>
+Ridvan Cetin<sup>1</sup>, Giulia Picco<sup>1</sup>, Jente van Staalduinen<sup>1</sup>, Eric Bindels<sup>2</sup>, Remco Hoogenboezem<sup>2</sup>, Gregory van Beek<sup>2</sup>, Mathijs Sanders<sup>2</sup>, Yaren Fidan<sup>1</sup>, Ahmet Korkmaz<sup>3</sup>, Joost Gribnau<sup>1,4</sup>, Jeffrey van Haren<sup>1</sup>, Danny Huylebroeck<sup>1</sup>, Eskeatnaf Mulugeta<sup>1</sup>, Frank Grosveld<sup>1,\±</sup>
 
 
 **Ivan Imaz-Rosshandler<sup>1,2,3,\*</sup>, Christina Rode<sup>4,\*</sup>, Carolina Guibentif<sup>5,\*</sup>, Mai-Linh Ton<sup>1,2</sup>, Parashar Dhapola<sup>10</sup>, Daniel Keitley<sup>6</sup>, Ricard Argelaguet<sup>11,12</sup>, Fernando J. Calero-Nieto<sup>2</sup>, Jennifer Nichols<sup>2</sup>, John C. Marioni<sup>7,8,9,\*\*</sup>, Marella de Bruijn<sup>4,\*\*</sup>, Berthold Göttgens<sup>1,2,\*\*</sup>**
