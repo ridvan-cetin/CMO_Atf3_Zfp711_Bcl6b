@@ -1,3 +1,9 @@
+---
+layout: default
+title: Welcome
+---
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
