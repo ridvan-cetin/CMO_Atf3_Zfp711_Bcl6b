@@ -59,22 +59,20 @@ IMPORTANT: This webpage is currently under development.
 
 ### Code availability<a name="code" />
 
-1. [Demultiplexing](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/1_demultiplexing.Rmd)
-2. [Preprocessing](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/2_preprocessing.Rmd)
-3. [Differential Abundance Analysis 1 (propeller/speckle)]
-4. [Differential Abundance Analysis 2 (miloR)]
-5. [Differential Gene Expression Analysis (Pseudobulk with DESeq2)]
-6. [Markers for Small Clusters]
-7. [Gene Set Enrichment Analysis]
-8. [Statistical Analysis of Flow Cytometric Analysis Results]
-9. [Categorization of Differentially Expressed Genes]
+1. [Demultiplexing](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/1_demultiplexing.Rmd)
+2. [Preprocessing](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/2_preprocessing.Rmd)
+3. [Differential Abundance Analysis 1 (propeller/speckle)](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/3_DAA_speckle.Rmd)
+4. [Differential Abundance Analysis 2 (miloR)](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/4_DAA_miloR.Rmd)
+5. [Differential Gene Expression Analysis (Pseudobulk with DESeq2)](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/5_DGEA_DESeq2.Rmd)
+6. [Markers for Small Clusters](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/7_GSEA.Rmd)
+7. [Gene Set Enrichment Analysis](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/7_GSEA.Rmd)
+8. [Statistical Analysis of Flow Cytometric Analysis Results](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/8_FCA_Statistics.Rmd)
+9. [Categorization of Differentially Expressed Genes](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/9_DEGs_categorization.Rmd)
 
 
 
 ### Support or Contact<a name="contact" />
-
-General queries can be directed 
-
+Ridvan Cetin: r.cetin@erasmusmc.nl 
 
 ### Other links<a name="links" />
 
