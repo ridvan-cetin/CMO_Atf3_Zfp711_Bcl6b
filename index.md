@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Welcome
+title: "Single-Cell Roadmap of Early Hemato-Endothelial Development: Roles of Atf3, Zfp711, And Bcl6b"
 ---
 
 
@@ -26,8 +26,7 @@ title: Welcome
 </head>
 <body>
     <header>
-        <h1>Single-Cell Roadmap of Early Hemato-Endothelial Development</h1>
-        <p>Roles of Atf3, Zfp711, and Bcl6b</p>
+        <h1>Single-Cell Roadmap of Early Hemato-Endothelial Development: Roles of Atf3, Zfp711, And Bcl6bt</h1>
     </header>
     <main class="content">
         <section>
