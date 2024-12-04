@@ -2,8 +2,8 @@ title: Ridvan Cetin's Website
 description: My Bioinformatics Journey
 theme: jekyll-theme-minimal
 author: Ridvan Cetin
-baseurl: "" # Leave this blank unless your site is in a subdirectory
-url: "https://ridvan-cetin.github.io/CMO_Atf3_Zfp711_Bcl6b/" # Replace <your-username> with your GitHub username
+baseurl: "/CMO_Atf3_Zfp711_Bcl6b" # Set this to the subdirectory of your site
+url: "https://ridvan-cetin.github.io" # Do not include the subdirectory here
 
 # Optional configurations
 markdown: kramdown
