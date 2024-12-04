@@ -1,0 +1,11 @@
+title: Ridvan Cetin's Website
+description: My Bioinformatics Journey
+theme: jekyll-theme-cayman
+author: Ridvan Cetin
+baseurl: "" # Leave this blank unless your site is in a subdirectory
+url: "https://<your-username>.github.io" # Replace <your-username> with your GitHub username
+
+# Optional configurations
+markdown: kramdown
+plugins:
+  - jekyll-feed
