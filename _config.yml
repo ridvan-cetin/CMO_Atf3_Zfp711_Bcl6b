@@ -3,7 +3,7 @@ description: My Bioinformatics Journey
 theme: jekyll-theme-cayman
 author: Ridvan Cetin
 baseurl: "" # Leave this blank unless your site is in a subdirectory
-url: "https://<your-username>.github.io" # Replace <your-username> with your GitHub username
+url: "https://ridvan-cetin.github.io/CMO_Atf3_Zfp711_Bcl6b/" # Replace <your-username> with your GitHub username
 
 # Optional configurations
 markdown: kramdown
