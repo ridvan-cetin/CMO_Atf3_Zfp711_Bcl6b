@@ -26,9 +26,9 @@ t
 
 ### Data availability<a name="data" />
 
-e.g., This data is an extension of a previously reported scRNA-Seq atlas covering mouse gastrulation and the early initiation of organogenesis through a densely sampled time-course of 6h sampling intervals from E6.5 to E8.5 (Pijuan-Sala B., Griffiths J. A., Guibentif C. et al., 2019) with newly sampled time points (E8.75-E9.5) as well as one overlapping time point (E8.5) to facilitate data integration. Combined, the new ‘extended’ atlas, ranging from E6.5 to E9.5 contains 430,339 cells across 13 time points spanning 3 days of mouse development 
+e.g., 
 
-e.g.,  Various forms of the transcriptomics data such as raw counts, normalised counts, dimensionality reductions and metadata are available [here](https://cloud.mrc-lmb.cam.ac.uk/s/yxq7FRtYsLyF3jQ) for loading into R and python. 
+e.g.,  Various forms of the transcriptomics data such as raw counts, normalised counts, dimensionality reductions and metadata are available [here] for loading into R and python. 
 
 
 | File name                                                    | Description                                                  |
@@ -55,16 +55,25 @@ IMPORTANT: This webpage is currently under development.
 
 #### UCSC Cell browser
 
-not gonna work for me. This data can be explored and downloaded from the [UCSC cell browser](https://cells-test.gi.ucsc.edu/?ds=ext-mouse-atlas). 
+
 
 ### Code availability<a name="code" />
 
-To be added soon.
+1. [Demultiplexing](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/1_demultiplexing.Rmd)
+2. [Preprocessing](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/2_preprocessing.Rmd)
+3. [Differential Abundance Analysis 1 (propeller/speckle)]
+4. [Differential Abundance Analysis 2 (miloR)]
+5. [Differential Gene Expression Analysis (Pseudobulk with DESeq2)]
+6. [Markers for Small Clusters]
+7. [Gene Set Enrichment Analysis]
+8. [Statistical Analysis of Flow Cytometric Analysis Results]
+9. [Categorization of Differentially Expressed Genes]
+
 
 
 ### Support or Contact<a name="contact" />
 
-General queries can be directed to [Bertie Göttgens](mailto:bg200@cam.ac.uk) , [John Marioni](mailto:marioni@ebi.ac.uk). For issues relating to the data or code, you can email Ivan Imaz-Rosshandler at [ivanir@mrc-lmb.cam.ac.uk](mailto:ivanir@mrc-lmb.cam.ac.uk).
+General queries can be directed 
 
 
 ### Other links<a name="links" />
@@ -73,35 +82,15 @@ General queries can be directed to [Bertie Göttgens](mailto:bg200@cam.ac.uk) , 
 
 ###### Affiliations
 
-1. *Department of Haematology, University of Cambridge, Cambridge CB2 0RE, UK*
+<sup>1</sup>Department of Cell Biology, Erasmus University Medical Center Rotterdam, Rotterdam, The Netherlands
 
-2. *Wellcome-Medical Research Council Cambridge Stem Cell Institute, University of Cambridge, Cambridge CB2 0AW, UK*
-
-3. *MRC Laboratory of Molecular Biology, Cambridge CB2 0QH, UK*
-
-4. *MRC Molecular Haematology Unit, MRC Weatherall Institute of Molecular Medicine, Radcliffe Department of Medicine, University of Oxford, Oxford OX3 9DS, UK*
-
-5. *Department of Microbiology and Immunology, University of Gothenburg, Gothenburg, Sweden*
-
-6. *Department of Zoology, University of Cambridge, Cambridge CB2 3EJ, UK*
-
-7. *Wellcome Sanger Institute, Wellcome Genome Campus, Saffron Walden CB10 1SA, UK*
-
-8. *European Molecular Biology Laboratory, European Bioinformatics Institute, Saffron Walden CB10 1SA, UK*
-
-9. *Cancer Research UK Cambridge Institute, University of Cambridge, Cambridge CB2 0RE, UK*
-
-10. *Division of Molecular Hematology, Lund Stem Cell Center, Lund University, Sweden*
-
-11. *Epigenetics Programme, Babraham Institute, Cambridge CB22 3AT, UK*
-
-12. *Altos Labs Cambridge Institute, Granta Park, Cambridge, CB21 6GP, UK*
-
-
-
-<sup>1</sup>Department of Cell Biology, Erasmus University Medical Center Rotterdam, Rotterdam, The Netherlands 
 <sup>2</sup>Department of Hematology, Erasmus University Medical Center Rotterdam, Rotterdam, The Netherlands
+
 <sup>3</sup>Medical Faculty, Institute of Physiology, RWTH Aachen University, Aachen, Germany
+
 <sup>4</sup>Department of Developmental Biology, Erasmus University Medical Center Rotterdam, Rotterdam, the Netherlands
+
 <sup>*</sup>Corresponding author
    
+-----
+Design of this page inspired from https://marionilab.github.io/ExtendedMouseAtlas/ .
