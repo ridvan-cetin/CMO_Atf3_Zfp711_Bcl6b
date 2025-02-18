@@ -9,6 +9,8 @@
 3. [Explore the data](#explore)
 4. [Code availability](#code)
 5. [Contact](#contact)
+6. [Supporting data](#supportdata)
+7. [Workflow and Cell Types]
 
 ### Abstract & Highlights<a name="Abstract" />
 
@@ -36,6 +38,7 @@ scRNA-Seq data generated in this study have been deposited in the European Nucle
 #### Shiny app 
 
 The data can be explored after logging into [shiny app](https://ridvan.shinyapps.io/shinyapp/).
+![Shinnyapp Example](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Shiny_example.png)
 
 ### Code availability<a name="code" />
 
@@ -50,8 +53,22 @@ The data can be explored after logging into [shiny app](https://ridvan.shinyapps
 9. [Categorization of Differentially Expressed Genes](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Analysis_Codes/9_DEGs_categorization.Rmd)
 
 
-### Support or Contact<a name="contact" />
-Ridvan Cetin: r.cetin@erasmusmc.nl or mdrcetin@gmail.com
+### Contact<a name="contact" />
+Ridvan Cetin: [r.cetin@erasmusmc.n](r.cetin@erasmusmc.nl) or [mdrcetin@gmail.com](mdrcetin@gmail.com)
+
+### Supporting Data (a name="supportdata" />
+
+1. [Flow Cytometric Analysis Data](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/tree/main/FlowCytometricAnalysis)
+
+### Workflow and Celltypes
+
+##### Workflow
+
+![Workflow](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Figure_s1_v1.png)
+
+##### Cell Types
+
+![Cell Types](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Cetin_Fig_2.png)
 
 ###### Affiliations
 
