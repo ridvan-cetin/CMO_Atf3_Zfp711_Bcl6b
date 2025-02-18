@@ -44,7 +44,7 @@ scRNA-Seq data generated in this study have been deposited in the European Nucle
 #### Shiny app 
 
 The data can be explored after logging into [shiny app](https://ridvan.shinyapps.io/shinyapp/).
-![Shinnyapp Example](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Shiny_example.png)
+![Shinnyapp Example](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Shiny_example.png?raw=true)
 
 ### Code availability<a name="code" />
 
@@ -70,11 +70,11 @@ Ridvan Cetin: [r.cetin@erasmusmc.nl](r.cetin@erasmusmc.nl) or [mdrcetin@gmail.co
 
 ##### Workflow
 
-![Workflow](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Figure_s1_v1.png)
+![Workflow](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Figure_s1_v1.png?raw=true)
 
 ##### Cell Types
 
-![Cell Types](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Cetin_Fig_2.png)
+![Cell Types](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/blob/main/Cetin_Fig_2.png?raw=true)
 
 ###### Affiliations
 
