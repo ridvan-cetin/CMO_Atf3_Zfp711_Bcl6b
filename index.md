@@ -10,7 +10,7 @@
 4. [Code availability](#code)
 5. [Contact](#contact)
 6. [Supporting data](#supportdata)
-7. [Workflow and Cell Types]
+7. [Workflow and Cell Types](#workflow)
 
 ### Abstract & Highlights<a name="Abstract" />
 
@@ -60,7 +60,7 @@ Ridvan Cetin: [r.cetin@erasmusmc.n](r.cetin@erasmusmc.nl) or [mdrcetin@gmail.com
 
 1. [Flow Cytometric Analysis Data](https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b/tree/main/FlowCytometricAnalysis)
 
-### Workflow and Celltypes
+### Workflow and Celltypes<a name="workflow" />
 
 ##### Workflow
 
