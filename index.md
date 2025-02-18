@@ -31,7 +31,13 @@ HIGHLIGHTS
 •	Bcl6b-KO: No observable impact on early hematopoiesis.
 
 ### Data availability<a name="data" />
-scRNA-Seq data generated in this study have been deposited in the European Nucleotide Archive (ENA) database under the accession number PRJEB82953.  ATAC-seq data used in this study is a separate project and will be deposited in the ENA database upon completion of the manuscript preparation. UCSC browser sessions can be accessible with the following links https://genome.ucsc.edu/s/mdrcetin/hg38_ATF3, https://genome.ucsc.edu/s/mdrcetin/mm10_Atf3, https://genome.ucsc.edu/s/mdrcetin/mm10_Zfp711, https://genome.ucsc.edu/s/mdrcetin/hg19_ZNF711, and https://genome.ucsc.edu/s/mdrcetin/hg38_ZNF711  The data supporting the findings of this study are available from the corresponding author upon reasonable request.
+scRNA-Seq data generated in this study have been deposited in the European Nucleotide Archive (ENA) database under the accession number PRJEB82953.  ATAC-seq data used in this study is a separate project and will be deposited in the ENA database upon completion of the manuscript preparation. UCSC browser sessions can be accessible with the following links:
+-   [https://genome.ucsc.edu/s/mdrcetin/hg38_ATF3](https://genome.ucsc.edu/s/mdrcetin/hg38_ATF3),
+-   [https://genome.ucsc.edu/s/mdrcetin/mm10_Atf3](https://genome.ucsc.edu/s/mdrcetin/mm10_Atf3),
+-   [https://genome.ucsc.edu/s/mdrcetin/mm10_Zfp711](https://genome.ucsc.edu/s/mdrcetin/mm10_Zfp711),
+-   [https://genome.ucsc.edu/s/mdrcetin/hg19_ZNF711](https://genome.ucsc.edu/s/mdrcetin/hg19_ZNF711),
+-   [https://genome.ucsc.edu/s/mdrcetin/hg38_ZNF711](https://genome.ucsc.edu/s/mdrcetin/hg38_ZNF711).
+  The data supporting the findings of this study are available from the corresponding author upon reasonable request.
 
 ### Explore the data<a name="explore" />
 
