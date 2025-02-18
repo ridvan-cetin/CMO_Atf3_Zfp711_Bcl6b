@@ -60,7 +60,7 @@ The data can be explored after logging into [shiny app](https://ridvan.shinyapps
 
 
 ### Contact<a name="contact" />
-Ridvan Cetin: [r.cetin@erasmusmc.n](r.cetin@erasmusmc.nl) or [mdrcetin@gmail.com](mdrcetin@gmail.com)
+Ridvan Cetin: [r.cetin@erasmusmc.nl](r.cetin@erasmusmc.nl) or [mdrcetin@gmail.com](mdrcetin@gmail.com)
 
 ### Supporting Data<a name="supportdata" />
 
