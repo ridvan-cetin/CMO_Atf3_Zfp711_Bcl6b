@@ -1,0 +1,157 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+atlas <- readRDS("~/scRIPT/000_io_dir/outputs/rds_files/extended_atlas_cellranger_features_seurat.rds")
+p <- DimPlot(atlas, reduction = "UMAP", group.by = 'celltype_extended_atlas',label = TRUE, alpha = 0.5)+ NoAxes()+NoLegend() 
+```
+```{r}
+table(atlas$stage)
+```
+```{r}
+
+```
+
+# EMP
+```{r}
+emp_candidates <- CellSelector(p)
+emp_candidates
+```
+```{r}
+atlas@meta.data[emp_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_328761 
+
+
+# MkP
+```{r}
+MkP_candidates <- CellSelector(p)
+MkP_candidates
+```
+```{r}
+atlas@meta.data[MkP_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_329685
+
+
+# Erythroid
+```{r}
+Erythroid_candidates <- CellSelector(p)
+Erythroid_candidates
+```
+```{r}
+atlas@meta.data[Erythroid_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_189604
+
+
+# YS Endothelium
+```{r}
+YSE_candidates <- CellSelector(p)
+YSE_candidates
+```
+```{r}
+atlas@meta.data[YSE_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_14984
+
+
+# Endocardium
+```{r}
+Endocardium_candidates <- CellSelector(p)
+Endocardium_candidates
+```
+```{r}
+atlas@meta.data[Endocardium_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_343138
+
+# YSM
+```{r}
+YSM_candidates <- CellSelector(p)
+YSM_candidates
+```
+```{r}
+atlas@meta.data[YSM_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_343138
+
+
+# Mesenchyme
+```{r}
+Mesenchyme_candidates <- CellSelector(p)
+Mesenchyme_candidates
+
+atlas@meta.data[Mesenchyme_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_325578
+
+
+# Allantois
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_194268
+
+
+# Epicardium
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_7917
+
+
+# Cardiomyocytes
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_172850
+
+
+# Limb Mesoderm
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_318387
+
+
+# Lateral Plate Mesoderm
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_29525
+
+
+# Epiblast
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+cell_5856
+
+
+
+```{r}
+atlas@meta.data[c('cell_5856',"cell_15629"),c("celltype_extended_atlas","stage") ]
+```
+
