@@ -19,9 +19,11 @@ Hematopoiesis occurs in three consecutive overlapping waves in mammals, regulate
 
 #### Article References
 **Development**
+
 Ridvan Cetin, Giulia Picco, Jente van Staalduinen, Eric Bindels, Remco Hoogenboezem, Gregory van Beek, Mathijs A. Sanders, Yaren Fidan, Ahmet Korkmaz, Joost Gribnau, Jeffrey van Haren, Danny Huylebroeck, Eskeatnaf Mulugeta, Frank Grosveld; Distinct Roles of Atf3, Zfp711, and Bcl6b in Early Embryonic Hematopoietic and Endothelial Lineage Specification. Development 2025; dev.204792. doi: https://doi.org/10.1242/dev.204792
 
 **bioRxiv**
+
 Single-Cell Roadmap of Early Hemato-Endothelial Development: Functions of Atf3, Zfp711 and Bcl6b
 Ridvan Cetin, Giulia Picco, Jente van Staalduinen, Eric Bindels, Remco Hoogenboezem, Gregory van Beek, Mathijs A Sanders, Yaren Fidan, Ahmet Korkmaz, Joost Gribnau, Jeffrey van Haren, Danny Huylebroeck, Eskeatnaf Mulugeta, Frank Grosveld
 bioRxiv 2025.02.23.639715; doi: https://doi.org/10.1101/2025.02.23.639715
