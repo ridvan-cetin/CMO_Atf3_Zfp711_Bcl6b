@@ -10,7 +10,8 @@ markdown: kramdown
 plugins:
   - jekyll-feed
 
-# Exclude files from build
+# Exclude from build
 exclude:
-  - README.md
-  - LICENSE
+  - Organized/
+  - Original_code/
+  - FlowCytometricAnalysis_data/

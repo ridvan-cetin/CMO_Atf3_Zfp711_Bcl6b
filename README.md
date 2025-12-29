@@ -28,7 +28,9 @@ CMO_Atf3_Zfp711_Bcl6b/
 ├── Organized/                    # Annotated analysis scripts (recommended)
 ├── Original_code/                # Original unmodified scripts
 ├── FlowCytometricAnalysis_data/  # FACS analysis input data
-└── support_site/                 # GitHub Pages website files
+├── images/                       # Images for GitHub Pages website
+├── _config.yml                   # Jekyll configuration
+└── index.md                      # GitHub Pages main page
 ```
 
 ## Analysis Codes
