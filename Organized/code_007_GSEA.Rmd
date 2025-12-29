@@ -1,0 +1,926 @@
+---
+title: "Gene Set Enrichment Analysis"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+We will perform GSEA for one condition.
+
+# ==============================================================================
+# SECTION 1: ENVIRONMENT SETUP AND PACKAGE LOADING
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Load Required Packages
+# ==============================================================================
+
+suppressPackageStartupMessages({
+  library(dplyr)    # Data manipulation
+  library(fgsea)    # Fast Gene Set Enrichment Analysis
+  library(ggplot2)  # Visualization
+})
+```
+
+# ==============================================================================
+# SECTION 2: LOAD DIFFERENTIAL GENE EXPRESSION DATA
+# ==============================================================================
+
+# Loading the data
+
+## Loading the Differential Gene Expression (DGE) Data from DESeq2
+
+Import DGE results from DESeq2 analysis. Ensure data integrity and format.
+
+```{r}
+# ==============================================================================
+# Load DESeq2 Results
+# ==============================================================================
+
+# read.delim(): Load tab-separated DESeq2 output
+# Contains: gene, baseMean, log2FoldChange, stat, pvalue, padj
+dge_results <- read.delim(
+  "/DESeq2_results_Atf3_cl_1/Late-Mesoderm_resOrdered_enhanced.txt")
+
+# summary(): Check for missing values and data distribution
+summary(dge_results)
+
+# Visualize stat value distribution (used for ranking)
+# stat: Wald statistic from DESeq2 (sign indicates direction, magnitude indicates confidence)
+hist(dge_results$stat, breaks = 50, main = "Distribution of Gene Expression Values", xlab = "Stat Value")
+```
+
+```{r}
+# ==============================================================================
+# Visualize Stat vs Adjusted P-value
+# ==============================================================================
+
+# Scatter plot showing relationship between stat and significance
+ggplot(dge_results, aes(x=stat, y=padj))+geom_point()
+```
+
+# ==============================================================================
+# SECTION 3: LOAD MSIGDB GENE SETS
+# ==============================================================================
+
+## Loading the MSigDB (Molecular Signatures Database)
+
+Load gene sets and pathways from MSigDB for enrichment analysis.
+
+```{r}
+# ==============================================================================
+# Load MSigDB Gene Set Collections (Mouse Symbols)
+# ==============================================================================
+
+# gmtPathways(): Read GMT (Gene Matrix Transposed) format files
+# GMT format: Each line is a pathway with gene members
+# Version: v2023.2.Mm (Mouse symbols)
+
+# -----------------------------------------------------------------------------
+# MH: Hallmark Gene Sets
+# -----------------------------------------------------------------------------
+# Summarize well-defined biological states/processes with coherent expression
+# 50 gene sets representing specific biological states
+mh_hallmark <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/mh.all.v2023.2.Mm.symbols.gmt")
+
+# -----------------------------------------------------------------------------
+# M1: Positional Gene Sets
+# -----------------------------------------------------------------------------
+# Gene sets corresponding to chromosome cytogenetic bands
+m1_positional <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m1.all.v2023.2.Mm.symbols.gmt")
+
+# -----------------------------------------------------------------------------
+# M2: Curated Gene Sets
+# -----------------------------------------------------------------------------
+
+# CGP: Chemical and Genetic Perturbations
+# Expression signatures from genetic/chemical perturbations
+# Often paired: xxx_UP (induced) and xxx_DN (repressed)
+m2_curated_cgp <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m2.cgp.v2023.2.Mm.symbols.gmt")
+
+# CP: Canonical Pathways (from various databases)
+
+# BioCarta pathways
+m2_cp_biocarta <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m2.cp.biocarta.v2023.2.Mm.symbols.gmt")
+
+# Reactome pathways
+m2_cp_reactome <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m2.cp.reactome.v2023.2.Mm.symbols.gmt")
+
+# WikiPathways
+m2_cp_wikipathways <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m2.cp.wikipathways.v2023.2.Mm.symbols.gmt")
+
+# -----------------------------------------------------------------------------
+# M3: Regulatory Target Gene Sets
+# -----------------------------------------------------------------------------
+
+# miRDB: microRNA targets
+# High-confidence miRNA target predictions from miRDB v6.0
+m3_miRDB <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m3.mirdb.v2023.2.Mm.symbols.gmt")
+
+# GTRD: Transcription Factor Targets
+# Genes with predicted TF binding sites in promoter region (-1000, +100 bp)
+m3_gtrd <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m3.gtrd.v2023.2.Mm.symbols.gmt")
+
+# -----------------------------------------------------------------------------
+# M5: Ontology Gene Sets (Gene Ontology)
+# -----------------------------------------------------------------------------
+
+# GO Biological Process
+m5_go_bp <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m5.go.bp.v2023.2.Mm.symbols.gmt")
+
+# GO Cellular Component
+m5_go_cc <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m5.go.cc.v2023.2.Mm.symbols.gmt")
+
+# GO Molecular Function
+m5_go_mf <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m5.go.mf.v2023.2.Mm.symbols.gmt")
+
+# MPT: Mammalian Phenotype Ontology (tumor-related subset)
+m5_go_mpt <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m5.mpt.v2023.2.Mm.symbols.gmt")
+
+# -----------------------------------------------------------------------------
+# M8: Cell Type Signature Gene Sets
+# -----------------------------------------------------------------------------
+# Curated cluster markers from single-cell studies
+m8_celltype <- fgsea::gmtPathways(
+  "~/cmo_chapter_v1/Analysis/4a_gsea/gmt/m8.all.v2023.2.Mm.symbols.gmt")
+```
+
+# ==============================================================================
+# SECTION 4: CREATE RANKED GENE LIST
+# ==============================================================================
+
+## Creating Ranked Gene List with "stat"
+
+Rank genes based on the "stat" column from the DESeq2 results. Prepare the ranked gene list for GSEA
+
+```{r}
+# ==============================================================================
+# Prepare Ranked Gene List for GSEA
+# ==============================================================================
+
+# Filter low-expressed genes (baseMean > 15)
+# baseMean: Mean normalized counts across all samples
+dge_results_1 <- dge_results %>%
+  filter(baseMean > 15)
+
+# Extract gene names and stat values only
+dge_results_rank <- dge_results_1[c("gene", "stat")]
+
+# Handle empty strings (convert to NA)
+dge_results_rank[dge_results_rank == ""] <- NA
+
+# Remove rows with NA values
+dge_results_rank <- na.omit(dge_results_rank)
+
+# Sort by stat value (highest to lowest)
+# Positive stat = upregulated in KO
+# Negative stat = downregulated in KO
+dge_results_rank <- dge_results_rank[order(-dge_results_rank$stat),]
+
+# Create named vector for fgsea
+# fgsea requires: named numeric vector where names are genes
+res <- dge_results_rank$stat
+names(res) <- dge_results_rank$gene
+
+# Check number of genes in ranked list
+length(res)
+```
+
+# ==============================================================================
+# SECTION 5: RUN FGSEA ANALYSIS
+# ==============================================================================
+
+# Gene Set Enrichment Analysis (GSEA)
+
+## Running fgsea
+
+Perform GSEA using the fgsea package with the ranked gene list and MSigDB pathways.
+
+```{r,results='hide'}
+# ==============================================================================
+# Run fgsea for All Gene Set Collections
+# ==============================================================================
+
+# fgsea(): Fast preranked GSEA
+# pathways: List of gene sets (from GMT files)
+# stats: Named vector of gene-level statistics (ranked list)
+# minSize = 15: Minimum gene set size (exclude smaller sets)
+# maxSize = 500: Maximum gene set size (exclude larger sets)
+# nproc = 4: Number of parallel processes
+
+fgseaRes_mh_hallmark <- 
+  fgsea(pathways = mh_hallmark, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m1_positional <-
+  fgsea(pathways = m1_positional, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m2_cgp <-
+  fgsea(pathways = m2_curated_cgp, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m2_cp_biocarta <-
+  fgsea(pathways = m2_cp_biocarta, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m2_cp_reactome <-
+  fgsea(pathways = m2_cp_reactome, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m2_cp_wikipathways <-
+  fgsea(pathways = m2_cp_wikipathways, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m3_miRDB <-
+  fgsea(pathways = m3_miRDB, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m3_gtrd <-
+  fgsea(pathways = m3_gtrd, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m5_go_bp <-
+  fgsea(pathways = m5_go_bp, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m5_go_cc <-
+  fgsea(pathways = m5_go_cc, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m5_go_mf <-
+  fgsea(pathways = m5_go_mf, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m5_mpt <-
+  fgsea(pathways = m5_go_mpt, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+fgseaRes_m8_celltype <-
+  fgsea(pathways = m8_celltype, stats = res, minSize=15, maxSize=500, nproc = 4)
+
+# ==============================================================================
+# Sort Results by Adjusted P-value
+# ==============================================================================
+
+# order(padj): Sort by significance (most significant first)
+fgseaRes_mh_hallmark <- fgseaRes_mh_hallmark[order(padj),]
+fgseaRes_m1_positional <- fgseaRes_m1_positional[order(padj),]
+fgseaRes_m2_cgp <- fgseaRes_m2_cgp[order(padj),]
+fgseaRes_m2_cp_biocarta <- fgseaRes_m2_cp_biocarta[order(padj),]
+fgseaRes_m2_cp_reactome <- fgseaRes_m2_cp_reactome[order(padj),]
+fgseaRes_m2_cp_wikipathways <- fgseaRes_m2_cp_wikipathways[order(padj),]
+fgseaRes_m3_miRDB <- fgseaRes_m3_miRDB[order(padj),]
+fgseaRes_m3_gtrd <- fgseaRes_m3_gtrd[order(padj),]
+fgseaRes_m5_go_bp <- fgseaRes_m5_go_bp[order(padj),]
+fgseaRes_m5_go_cc <- fgseaRes_m5_go_cc[order(padj),]
+fgseaRes_m5_go_mf <- fgseaRes_m5_go_mf[order(padj),]
+fgseaRes_m5_mpt <- fgseaRes_m5_mpt[order(padj),]
+fgseaRes_m8_celltype <- fgseaRes_m8_celltype[order(padj),]
+
+```
+
+# ==============================================================================
+# SECTION 6: SAVE UNFILTERED RESULTS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Save All GSEA Results (Unfiltered)
+# ==============================================================================
+
+# saveRDS(): Save R objects for later use
+saveRDS(fgseaRes_mh_hallmark,"./fgseaRes_mh_hallmark.RDS")
+saveRDS(fgseaRes_m1_positional,"./fgseaRes_m1_positional.RDS")
+saveRDS(fgseaRes_m2_cgp,"./fgseaRes_m2_cgp.RDS")
+saveRDS(fgseaRes_m2_cp_biocarta,"./fgseaRes_m2_cp_biocarta.RDS")
+saveRDS(fgseaRes_m2_cp_reactome,"./fgseaRes_m2_cp_reactome.RDS")
+saveRDS(fgseaRes_m2_cp_wikipathways,"./fgseaRes_m2_cp_wikipathways.RDS")
+saveRDS(fgseaRes_m3_miRDB,"./fgseaRes_m3_miRDB.RDS")
+saveRDS(fgseaRes_m3_gtrd,"./fgseaRes_m3_gtrd.RDS")
+saveRDS(fgseaRes_m5_go_bp,"./fgseaRes_m5_go_bp.RDS")
+saveRDS(fgseaRes_m5_go_cc,"./fgseaRes_m5_go_cc.RDS")
+saveRDS(fgseaRes_m5_go_mf,"./fgseaRes_m5_go_mf.RDS")
+saveRDS(fgseaRes_m5_mpt,"./fgseaRes_m5_mpt.RDS")
+saveRDS(fgseaRes_m8_celltype,"./fgseaRes_m8_celltype.RDS")
+```
+
+# ==============================================================================
+# SECTION 7: FILTER SIGNIFICANT PATHWAYS
+# ==============================================================================
+
+## Filtering the GSEA Results with padj
+
+Apply a cutoff to filter pathways based on adjusted p-value (padj).
+
+```{r}
+# ==============================================================================
+# Filter Pathways by padj < 0.05
+# ==============================================================================
+
+# Keep only significantly enriched pathways
+fgseaRes_mh_hallmark <-
+  fgseaRes_mh_hallmark%>%
+  filter(padj<0.05)
+
+fgseaRes_m1_positional <-
+  fgseaRes_m1_positional%>%
+  filter(padj<0.05)
+  
+fgseaRes_m2_cgp <-
+  fgseaRes_m2_cgp%>%
+  filter(padj<0.05)
+  
+fgseaRes_m2_cp_biocarta <-
+  fgseaRes_m2_cp_biocarta%>%
+  filter(padj<0.05)
+
+fgseaRes_m2_cp_reactome <-
+  fgseaRes_m2_cp_reactome%>%
+  filter(padj<0.05)
+  
+fgseaRes_m2_cp_wikipathways <-
+  fgseaRes_m2_cp_wikipathways%>%
+  filter(padj<0.05)
+  
+fgseaRes_m3_miRDB <-
+  fgseaRes_m3_miRDB%>%
+  filter(padj<0.05)
+
+fgseaRes_m3_gtrd <-
+  fgseaRes_m3_gtrd%>%
+  filter(padj<0.05)
+  
+fgseaRes_m5_go_bp <-
+  fgseaRes_m5_go_bp%>%
+  filter(padj<0.05)
+  
+fgseaRes_m5_go_cc <-
+  fgseaRes_m5_go_cc%>%
+  filter(padj<0.05)
+  
+fgseaRes_m5_go_mf <-
+  fgseaRes_m5_go_mf%>%
+  filter(padj<0.05)
+  
+fgseaRes_m5_mpt <-
+  fgseaRes_m5_mpt%>%
+  filter(padj<0.05)
+  
+fgseaRes_m8_celltype <-
+  fgseaRes_m8_celltype%>%
+  filter(padj<0.05)
+```
+
+# ==============================================================================
+# SECTION 8: SAVE FILTERED RESULTS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Save Filtered GSEA Results
+# ==============================================================================
+
+saveRDS(fgseaRes_mh_hallmark,"./fgseaRes_mh_hallmark_filtered.RDS")
+saveRDS(fgseaRes_m1_positional,"./fgseaRes_m1_positional_filtered.RDS")
+saveRDS(fgseaRes_m2_cgp,"./fgseaRes_m2_cgp_filtered.RDS")
+saveRDS(fgseaRes_m2_cp_biocarta,"./fgseaRes_m2_cp_biocarta_filtered.RDS")
+saveRDS(fgseaRes_m2_cp_reactome,"./fgseaRes_m2_cp_reactome_filtered.RDS")
+saveRDS(fgseaRes_m2_cp_wikipathways,"./fgseaRes_m2_cp_wikipathways_filtered.RDS")
+saveRDS(fgseaRes_m3_miRDB,"./fgseaRes_m3_miRDB_filtered.RDS")
+saveRDS(fgseaRes_m3_gtrd,"./fgseaRes_m3_gtrd_filtered.RDS")
+saveRDS(fgseaRes_m5_go_bp,"./fgseaRes_m5_go_bp_filtered.RDS")
+saveRDS(fgseaRes_m5_go_cc,"./fgseaRes_m5_go_cc_filtered.RDS")
+saveRDS(fgseaRes_m5_go_mf,"./fgseaRes_m5_go_mf_filtered.RDS")
+saveRDS(fgseaRes_m5_mpt,"./fgseaRes_m5_mpt_filtered.RDS")
+saveRDS(fgseaRes_m8_celltype,"./fgseaRes_m8_celltype_filtered.RDS")
+```
+
+# ==============================================================================
+# SECTION 9: VISUALIZATION - BUBBLE PLOTS
+# ==============================================================================
+
+## Visualization of GSEA Results
+
+Generate visualizations (e.g., enrichment plots) to summarize GSEA results.
+
+```{r,fig.width=10,fig.height=10}
+# ==============================================================================
+# Basic Bubble Plot - Hallmark Pathways
+# ==============================================================================
+
+# Bubble plot: x = -log10(padj), size = gene set size, fill = NES
+# NES (Normalized Enrichment Score): Positive = upregulated, Negative = downregulated
+ggplot(fgseaRes_mh_hallmark[1:50,], aes(reorder(pathway, -log10(padj)), -log10(padj), size=size)) +
+  geom_point(aes(fill=NES), shape=21) +
+  coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+  scale_fill_gradient2(low="red", mid="white", high="blue", midpoint=0) +
+  labs(title ="Hallmarks", x = "", y = "-log10(padj)") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(size=10),
+        axis.text.y.top = element_text(margin = margin(t = 20)),
+        axis.text.y = element_text(size=10),
+        title = element_text(size=18),
+        legend.position = "right")
+```
+
+```{r,fig.width=15, fig.height=20}
+# ==============================================================================
+# Generate Bubble Plots for All Collections
+# ==============================================================================
+
+# Reusable function for consistent plotting
+generate_plot <- function(data, title) {
+  ggplot(data[1:100,], aes(reorder(pathway, -log10(padj)), -log10(padj), size=size)) +
+    geom_point(aes(fill=NES), shape=21) +
+    coord_flip() +
+    scale_y_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+    scale_fill_gradient2(low="red", mid="white", high="blue", midpoint=0) +
+    labs(title = title, x = "", y = "-log10(padj)") + 
+    theme_minimal() +
+    theme(axis.text.x = element_text(size=10),
+          axis.text.x.top = element_text(margin = margin(t = 20)),
+          axis.text.y = element_text(size=10),
+          title = element_text(size=18),
+          legend.position = "right")
+}
+
+# Generate plots for all collections
+print(generate_plot(fgseaRes_mh_hallmark, "Hallmarks"))
+print(generate_plot(fgseaRes_m1_positional, "Positional"))
+print(generate_plot(fgseaRes_m2_cgp, "CGP"))
+print(generate_plot(fgseaRes_m2_cp_biocarta, "BioCarta"))
+print(generate_plot(fgseaRes_m2_cp_reactome, "Reactome"))
+print(generate_plot(fgseaRes_m2_cp_wikipathways, "WikiPathways"))
+print(generate_plot(fgseaRes_m3_miRDB, "miRDB"))
+print(generate_plot(fgseaRes_m3_gtrd, "GTRD"))
+print(generate_plot(fgseaRes_m5_go_bp, "GO BP"))
+print(generate_plot(fgseaRes_m5_go_cc, "GO CC"))
+print(generate_plot(fgseaRes_m5_go_mf, "GO MF"))
+print(generate_plot(fgseaRes_m5_mpt, "MPT"))
+print(generate_plot(fgseaRes_m8_celltype, "Celltype"))
+
+# ==============================================================================
+# Export All Plots to PDF
+# ==============================================================================
+
+pdf("gsea_results_plots.pdf",width = 15, height = 20)
+print(generate_plot(fgseaRes_mh_hallmark, "Hallmarks"))
+print(generate_plot(fgseaRes_m1_positional, "Positional"))
+print(generate_plot(fgseaRes_m2_cgp, "CGP"))
+print(generate_plot(fgseaRes_m2_cp_biocarta, "BioCarta"))
+print(generate_plot(fgseaRes_m2_cp_reactome, "Reactome"))
+print(generate_plot(fgseaRes_m2_cp_wikipathways, "WikiPathways"))
+print(generate_plot(fgseaRes_m3_miRDB, "miRDB"))
+print(generate_plot(fgseaRes_m3_gtrd, "GTRD"))
+print(generate_plot(fgseaRes_m5_go_bp, "GO BP"))
+print(generate_plot(fgseaRes_m5_go_cc, "GO CC"))
+print(generate_plot(fgseaRes_m5_go_mf, "GO MF"))
+print(generate_plot(fgseaRes_m5_mpt, "MPT"))
+print(generate_plot(fgseaRes_m8_celltype, "Celltype"))
+dev.off()
+```
+
+# ==============================================================================
+# SECTION 10: SEPARATE UP/DOWN REGULATED PATHWAYS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Split Hallmark Pathways by Direction
+# ==============================================================================
+
+# NES < 0: Pathway genes are downregulated (enriched at bottom of ranked list)
+fgseaRes_mh_hallmark_down <-
+  fgseaRes_mh_hallmark%>%
+  filter(NES< 0)
+
+fgseaRes_mh_hallmark_down$pathway
+
+# NES > 0: Pathway genes are upregulated (enriched at top of ranked list)
+fgseaRes_mh_hallmark_up <-
+  fgseaRes_mh_hallmark%>%
+  filter(NES> 0)
+
+fgseaRes_mh_hallmark_up$pathway
+```
+
+```{r}
+# ==============================================================================
+# Split Reactome Pathways by Direction
+# ==============================================================================
+
+fgseaRes_m2_cp_reactome_down <-
+  fgseaRes_m2_cp_reactome%>%
+  filter(NES< 0)
+
+fgseaRes_m2_cp_reactome_down$pathway
+
+
+fgseaRes_m2_cp_reactome_up <-
+  fgseaRes_m2_cp_reactome%>%
+  filter(NES> 0)
+
+fgseaRes_m2_cp_reactome_up$pathway
+```
+
+```{r}
+# ==============================================================================
+# Split GO Biological Process by Direction
+# ==============================================================================
+
+fgseaRes_m5_go_bp_down <-
+  fgseaRes_m5_go_bp%>%
+  filter(NES< 0)
+
+fgseaRes_m5_go_bp_down$pathway
+
+
+fgseaRes_m5_go_bp_up <-
+  fgseaRes_m5_go_bp%>%
+  filter(NES> 0)
+
+fgseaRes_m5_go_bp_up$pathway
+```
+
+# ==============================================================================
+# SECTION 11: ENRICHMENT PLOT FUNCTION
+# ==============================================================================
+
+## Selecting
+
+```{r}
+# ==============================================================================
+# Initialize Pathways Storage and Define Enrichment Plot Function
+# ==============================================================================
+
+# Create list to store selected pathway results
+if (!exists("pathways")) {
+  pathways <- list()
+}
+
+# generate_enrichment_plot(): Create and save individual enrichment plots
+# pathway_name: Name of pathway to plot
+# fgsea_result_table: GSEA results data frame
+# ranked_list: Named vector used for GSEA
+# mh_hallmark: Pathway gene sets list
+# output_directory: Where to save PDFs
+generate_enrichment_plot <- function(pathway_name, fgsea_result_table, ranked_list,
+                                     mh_hallmark, output_directory = "./", 
+                                     plot_width = 5, plot_height = 3) {
+  # Extract pathway statistics
+  stats <- fgsea_result_table[fgsea_result_table$pathway == pathway_name, ]
+  
+  if(nrow(stats) == 0) {
+    stop("Pathway not found in the fgsea result table.")
+  }
+
+  # plotEnrichment(): Classic GSEA running enrichment plot
+  # Shows: Running enrichment score, gene positions, leading edge
+  plot <- plotEnrichment(mh_hallmark[[pathway_name]], ranked_list, ticksSize = 0.2) +
+    labs(title = pathway_name,
+         caption = paste("padj: ", formatC(stats$padj, format = "e", digits = 2),
+                         "NES: ", round(stats$NES, 2),
+                         "Size: ", stats$size)) +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5),
+          axis.title.x = element_text(size = 12),
+          axis.title.y = element_text(size = 12))
+
+  # Save plot to PDF
+  ggsave(
+    filename = paste0(output_directory, "/", pathway_name, ".pdf"),
+    plot = plot,
+    width = plot_width,
+    height = plot_height,
+    units = "in",
+    dpi = 300,
+    limitsize = TRUE
+  )
+  
+  print(plot)
+  
+  # Store pathway stats in global list
+  # <<-: Assign to global environment
+  pathways[[pathway_name]] <<- stats
+  
+  # Return leading edge genes
+  return(stats$leadingEdge)
+}
+```
+
+# ==============================================================================
+# SECTION 12: INDIVIDUAL PATHWAY ENRICHMENT PLOTS
+# ==============================================================================
+
+```{r,fig.width=5,fig.height=3}
+# ==============================================================================
+# Generate Enrichment Plots for Selected Pathways
+# ==============================================================================
+
+generate_enrichment_plot("HALLMARK_TGF_BETA_SIGNALING",
+                         fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_TNFA_SIGNALING_VIA_NFKB", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_KRAS_SIGNALING_UP",
+                         fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_WNT_BETA_CATENIN_SIGNALING",
+                         fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_NOTCH_SIGNALING", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_MITOTIC_SPINDLE", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_APOPTOSIS", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_ESTROGEN_RESPONSE_EARLY", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_HYPOXIA", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_INTERFERON_GAMMA_RESPONSE", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_INTERFERON_ALPHA_RESPONSE", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_IL6_JAK_STAT3_SIGNALING", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_OXIDATIVE_PHOSPHORYLATION", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_GLYCOLYSIS", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_FATTY_ACID_METABOLISM", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_ADIPOGENESIS", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_BILE_ACID_METABOLISM", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_PEROXISOME", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_PROTEIN_SECRETION", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_MTORC1_SIGNALING", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_UV_RESPONSE_DN", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+HALLMARK_ANGIOGENESIS HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION HALLMARK_MYOGENESIS
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_ANGIOGENESIS", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_MYOGENESIS", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_UV_RESPONSE_DN", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_UV_RESPONSE_DN", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_UV_RESPONSE_DN", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_UV_RESPONSE_DN", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+```{r,fig.width=5,fig.height=3}
+generate_enrichment_plot("HALLMARK_UV_RESPONSE_DN", fgseaRes_mh_hallmark, res, mh_hallmark)
+```
+
+# ==============================================================================
+# SECTION 13: COMBINED VISUALIZATION
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Load Additional Packages
+# ==============================================================================
+
+library(stringr)  # String manipulation (str_wrap)
+```
+
+```{r}
+# ==============================================================================
+# Load Pre-saved Results
+# ==============================================================================
+
+pathways <- readRDS("./pathways.RDS")
+```
+
+```{r}
+# Load filtered results
+fgseaRes_mh_hallmark_filtered <- readRDS("./fgseaRes_mh_hallmark_filtered.RDS")
+fgseaRes_m5_go_bp_filtered <- readRDS("./fgseaRes_m5_go_bp_filtered.RDS")
+fgseaRes_m2_cp_reactome <- readRDS("./fgseaRes_m2_cp_reactome_filtered.RDS")
+```
+
+```{r}
+# ==============================================================================
+# Combine Results from Multiple Collections
+# ==============================================================================
+
+# rbind(): Combine rows from different gene set collections
+gsea <- rbind(fgseaRes_mh_hallmark_filtered,fgseaRes_m5_go_bp_filtered,fgseaRes_m2_cp_reactome)
+```
+
+# ==============================================================================
+# SECTION 14: PUBLICATION-QUALITY PLOTS
+# ==============================================================================
+
+```{r,fig.width=6.5,fig.height=5.5}
+# ==============================================================================
+# Publication-Quality Hallmark Plot
+# ==============================================================================
+
+set.seed(123)
+
+# wrap_text(): Wrap long pathway names and replace underscores with spaces
+wrap_text <- function(y) str_wrap(gsub("_", " ", y), width = 45)
+
+# Create publication-quality bubble plot
+pl_emp_hall <-
+  ggplot(fgseaRes_mh_hallmark_filtered[1:20,], aes(y=reorder(pathway, -log10(padj)), x=-log10(padj), size=size)) +
+  geom_point(aes(fill=NES), shape=21) +
+  scale_fill_gradient2(low="red", mid="white", high="blue", midpoint=0) +
+  labs(title ="EMP GSEA:HALLMARK",y="") + 
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black", face = "bold"),
+    axis.title.x = element_text(size = 8),
+    axis.title.y = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    axis.text.y = element_text(size = 8, margin = margin(t = 0, r = 0, b = 0, l = 0)),
+    legend.position = "inside",
+    legend.position.inside = c(0.92, 0.45),
+    legend.background = element_rect(fill = "transparent"),
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    axis.line = element_line(size = 0.2)
+  ) +
+  scale_y_discrete(labels = function(y) wrap_text(y)) +
+  labs(size="Genes")
+
+print(pl_emp_hall)
+```
+
+
+```{r,fig.width=6.5,fig.height=5.5}
+# Duplicate plot (same as above)
+set.seed(123)
+wrap_text <- function(y) str_wrap(gsub("_", " ", y), width = 45)
+
+pl_emp_hall <-
+  ggplot(fgseaRes_mh_hallmark_filtered[1:20,], aes(y=reorder(pathway, -log10(padj)), x=-log10(padj), size=size)) +
+  geom_point(aes(fill=NES), shape=21) +
+  scale_fill_gradient2(low="red", mid="white", high="blue", midpoint=0) +
+  labs(title ="EMP GSEA:HALLMARK",y="") + 
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black", face = "bold"),
+    axis.title.x = element_text(size = 8),
+    axis.title.y = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    axis.text.y = element_text(size = 8, margin = margin(t = 0, r = 0, b = 0, l = 0)),
+    legend.position = "inside",
+    legend.position.inside = c(0.92, 0.45),
+    legend.background = element_rect(fill = "transparent"),
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    axis.line = element_line(size = 0.2)
+  ) +
+  scale_y_discrete(labels = function(y) wrap_text(y)) +
+  labs(size="Genes")
+
+print(pl_emp_hall)
+```
+
+```{r,fig.width=6.5,fig.height=5.5}
+# ==============================================================================
+# Publication-Quality GO Biological Process Plot
+# ==============================================================================
+
+set.seed(123)
+wrap_text <- function(y) str_wrap(gsub("_", " ", y), width = 45)
+
+pl_emp_gobp <-
+  ggplot(fgseaRes_m5_go_bp_filtered[1:20,], aes(y=reorder(pathway, -log10(padj)), x=-log10(padj), size=size)) +
+  geom_point(aes(fill=NES), shape=21) +
+  scale_fill_gradient2(low="red", mid="white", high="blue", midpoint=0) +
+  labs(title ="EMP GSEA:GO-BP",y="") + 
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black", face = "bold"),
+    axis.title.x = element_text(size = 8),
+    axis.title.y = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    axis.text.y = element_text(size = 8, margin = margin(t = 0, r = 0, b = 0, l = 0)),
+    legend.position = "inside",
+    legend.position.inside = c(0.92, 0.45),
+    legend.background = element_rect(fill = "transparent"),
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    axis.line = element_line(size = 0.2)
+  ) +
+  scale_y_discrete(labels = function(y) wrap_text(y)) +
+  labs(size="Genes")
+
+print(pl_emp_gobp)
+```
+
+```{r,fig.width=6.5,fig.height=5.5}
+# ==============================================================================
+# Publication-Quality Reactome Plot
+# ==============================================================================
+
+set.seed(123)
+wrap_text <- function(y) str_wrap(gsub("_", " ", y), width = 45)
+
+pl_emp_reactome <- 
+  ggplot(fgseaRes_m2_cp_reactome[1:20,], aes(y=reorder(pathway, -log10(padj)), x=-log10(padj), size=size)) +
+  geom_point(aes(fill=NES), shape=21) +
+  scale_fill_gradient2(low="red", mid="white", high="blue", midpoint=0) +
+  labs(title ="EMP GSEA-Reactome",y="") + 
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black", face = "bold"),
+    axis.title.x = element_text(size = 8),
+    axis.title.y = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    axis.text.y = element_text(size = 8, margin = margin(t = 0, r = 0, b = 0, l = 0)),
+    legend.position = "inside",
+    legend.position.inside = c(0.92, 0.45),
+    legend.background = element_rect(fill = "transparent"),
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    axis.line = element_line(size = 0.2)
+  ) +
+  scale_y_discrete(labels = function(y) wrap_text(y)) +
+  labs(size="Genes")
+
+print(pl_emp_reactome)
+
+```
+
+# ==============================================================================
+# SECTION 15: SESSION INFORMATION
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Record Session Information for Reproducibility
+# ==============================================================================
+
+sessionInfo()
+```

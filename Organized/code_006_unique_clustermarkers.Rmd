@@ -1,0 +1,186 @@
+---
+title: "Unique Clusters Marker Search"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+# ==============================================================================
+# SECTION 1: ENVIRONMENT SETUP
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Load Required Package
+# ==============================================================================
+
+library(Seurat)  # Single-cell analysis toolkit
+```
+
+
+We observed there are three small clusters/populations. Due to limitations of the cell numbers, we cannot get proper DESeq2 results from pseudbulked data. For this reason we will use seurat for finding markers.
+
+# ==============================================================================
+# SECTION 2: MARKER ANALYSIS - MESODERM_IFIT1 (baIfit1)
+# ==============================================================================
+
+# baIfit1
+
+```{r}
+# ==============================================================================
+# Set Identity and Find Markers for Mesoderm_Ifit1
+# ==============================================================================
+
+# Set active identity to cluster level (cl_2)
+s_cmo$ident <- s_cmo$cl_2
+Idents(s_cmo) <- "cl_2"
+
+# FindMarkers(): Identify differentially expressed genes between clusters
+# ident.1 = "Mesoderm_Ifit1": Target cluster (positive logFC = higher in this cluster)
+# ident.2 = c("Mesoderm_Hoxb","Mesoderm_Hoxa"): Reference clusters for comparison
+# min.pct = 0: No minimum percentage filter (include all genes)
+# logfc.threshold = 0: No fold change filter (include all genes)
+# Using no thresholds to get complete results for downstream analysis (GSEA, etc.)
+baIfit1_cmo_CvsN_3 <- FindMarkers(s_cmo, 
+                                   ident.1 = "Mesoderm_Ifit1", 
+                                   ident.2 = c("Mesoderm_Hoxb", "Mesoderm_Hoxa"),
+                                   min.pct = 0, 
+                                   logfc.threshold = 0)
+```
+
+```{r}
+# ==============================================================================
+# Handle Zero P-values
+# ==============================================================================
+
+# Replace exact zero p-values with very small number
+# Zero p-values occur when Wilcoxon test returns exact zeros
+# 1e-300: Smallest practical value for -log10 transformation
+# This prevents infinite values in downstream calculations
+
+# Replace adjusted p-values of 0
+baIfit1_cmo_CvsN_3$p_val_adj[baIfit1_cmo_CvsN_3$p_val_adj == 0] <- 1e-300
+
+# Replace raw p-values of 0
+baIfit1_cmo_CvsN_3$p_val[baIfit1_cmo_CvsN_3$p_val == 0] <- 1e-300
+```
+
+## adding ranking column (which partially tries to mimic the stat values from DESeq2)
+
+```{r}
+# ==============================================================================
+# Create DESeq2-like Statistic for Ranking
+# ==============================================================================
+
+# statlike: Signed -log10(p-value) similar to DESeq2 stat column
+# sign(avg_log2FC): +1 for upregulated, -1 for downregulated
+# -log10(p_val): Significance magnitude (higher = more significant)
+# Result: Positive values = significantly upregulated in ident.1
+#         Negative values = significantly downregulated in ident.1
+# Useful for GSEA preranked analysis
+baIfit1_cmo_CvsN_3$statlike <- sign(baIfit1_cmo_CvsN_3$avg_log2FC) * (-log10(baIfit1_cmo_CvsN_3$p_val))
+```
+
+# ==============================================================================
+# SECTION 3: MARKER ANALYSIS - ENDRSAD2
+# ==============================================================================
+
+# EndRsad2
+
+```{r}
+# ==============================================================================
+# Set Identity and Find Markers for EndRsad2
+# ==============================================================================
+
+# Switch to subcluster level (cl_3) for endothelial subclusters
+s_cmo$ident <- s_cmo$cl_3
+Idents(s_cmo) <- "cl_3"
+
+# Compare EndRsad2 against other endothelial subclusters
+# EndRsad2: Endothelial cells expressing Rsad2 (interferon-stimulated gene)
+# Reference: EndGadd45g, EndCdh5, EndCyp26b1 (other endothelial populations)
+EndRsad2_cmo_CvsN_3 <- FindMarkers(s_cmo, 
+                                    ident.1 = "EndRsad2", 
+                                    ident.2 = c("EndGadd45g", "EndCdh5", "EndCyp26b1"),
+                                    min.pct = 0, 
+                                    logfc.threshold = 0)
+```
+
+```{r}
+# ==============================================================================
+# Handle Zero P-values
+# ==============================================================================
+
+# Replace adjusted p-values of 0
+EndRsad2_cmo_CvsN_3$p_val_adj[EndRsad2_cmo_CvsN_3$p_val_adj == 0] <- 1e-300
+
+# Replace raw p-values of 0
+EndRsad2_cmo_CvsN_3$p_val[EndRsad2_cmo_CvsN_3$p_val == 0] <- 1e-300
+```
+
+## adding ranking column (which partially tries to mimic the stat values from DESeq2)
+
+```{r}
+# ==============================================================================
+# Create DESeq2-like Statistic
+# ==============================================================================
+
+EndRsad2_cmo_CvsN_3$statlike <- sign(EndRsad2_cmo_CvsN_3$avg_log2FC) * (-log10(EndRsad2_cmo_CvsN_3$p_val))
+```
+
+# ==============================================================================
+# SECTION 4: MARKER ANALYSIS - ENDCYP26B1
+# ==============================================================================
+
+# EndCyp26b1
+
+```{r}
+# ==============================================================================
+# Set Identity and Find Markers for EndCyp26b1
+# ==============================================================================
+
+# Ensure subcluster identity is set
+s_cmo$ident <- s_cmo$cl_3
+Idents(s_cmo) <- "cl_3"
+
+# Compare EndCyp26b1 against other endothelial subclusters
+# EndCyp26b1: Endothelial cells expressing Cyp26b1 (retinoic acid metabolism)
+# Reference: EndGadd45g, EndCdh5, EndRsad2 (other endothelial populations)
+EndCyp26b1_cmo_CvsN_3 <- FindMarkers(s_cmo, 
+                                      ident.1 = "EndCyp26b1", 
+                                      ident.2 = c("EndGadd45g", "EndCdh5", "EndRsad2"),
+                                      min.pct = 0, 
+                                      logfc.threshold = 0)
+```
+
+```{r}
+# ==============================================================================
+# Handle Zero P-values
+# ==============================================================================
+
+# Replace adjusted p-values of 0
+EndCyp26b1_cmo_CvsN_3$p_val_adj[EndCyp26b1_cmo_CvsN_3$p_val_adj == 0] <- 1e-300
+
+# Replace raw p-values of 0
+EndCyp26b1_cmo_CvsN_3$p_val[EndCyp26b1_cmo_CvsN_3$p_val == 0] <- 1e-300
+```
+
+```{r}
+# ==============================================================================
+# Create DESeq2-like Statistic
+# ==============================================================================
+
+EndCyp26b1_cmo_CvsN_3$statlike <- sign(EndCyp26b1_cmo_CvsN_3$avg_log2FC) * (-log10(EndCyp26b1_cmo_CvsN_3$p_val))
+```
+
+# ==============================================================================
+# SECTION 5: SESSION INFORMATION
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Record Session Information for Reproducibility
+# ==============================================================================
+
+sessionInfo()
+```

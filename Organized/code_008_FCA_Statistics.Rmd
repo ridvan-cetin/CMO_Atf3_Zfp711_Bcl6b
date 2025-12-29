@@ -1,0 +1,747 @@
+---
+title: "Analysis of Flow Cytometric Data"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+# ==============================================================================
+# SECTION 1: INTRODUCTION
+# ==============================================================================
+
+# Introduction
+
+In this notebook, we analyze flow cytometry data to compare the effects of **Atf3 Knockout (KO)** and **Non-Targeting Wild Type (NT WT)** conditions on various cellular measurements. We perform mixed-effects linear modeling to assess the statistical significance of differences between these two conditions while accounting for differentiation stages as random effects.
+
+**Note:** The data files `FCA_2024_3.csv` and `FCA_2024_2.csv` should be available in the `../../FCA_DATA/` directory.
+
+# ==============================================================================
+# SECTION 2: ENVIRONMENT SETUP AND PACKAGE LOADING
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Load Required Packages
+# ==============================================================================
+
+library(dplyr)     # Data manipulation
+library(tidyr)     # Data tidying
+library(lme4)      # Linear mixed-effects models (lmer)
+library(ggplot2)   # Visualization
+library(reshape2)  # Data reshaping (melt)
+library(ggpubr)    # Publication-ready plots
+```
+
+# ==============================================================================
+# SECTION 3: DATA LOADING
+# ==============================================================================
+
+# Data Preparation
+
+## Loading the Data
+
+First, we load the main dataset containing the flow cytometry measurements.
+
+```{r}
+# ==============================================================================
+# Load Flow Cytometry Data
+# ==============================================================================
+
+# read.csv(): Load CSV file with flow cytometry measurements
+# check.names = FALSE: Preserve original column names (don't convert special chars)
+data <- read.csv("../../FCA_DATA/FCA_2024_3.csv", check.names = FALSE)
+
+# ==============================================================================
+# Convert Columns to Factors
+# ==============================================================================
+
+# as.factor(): Convert categorical variables to factors for statistical modeling
+# Sample identifiers at different levels
+data$Samples0 <- as.factor(data$Samples0)
+data$Samples1 <- as.factor(data$Samples1)
+data$Samples2 <- as.factor(data$Samples2)
+data$Samples3 <- as.factor(data$Samples3)
+
+# Experimental conditions (Atf3 KO, NT WT, etc.)
+data$Conditions <- as.factor(data$Conditions)
+
+# Differentiation stage identifiers at different annotation levels
+data$DifferentiationA <- as.factor(data$DifferentiationA)
+data$DifferentiationB <- as.factor(data$DifferentiationB)
+data$DifferentiationC <- as.factor(data$DifferentiationC)
+
+# Backup original data before modifications
+data0 <- data
+```
+
+**Explanation:**
+
+-   **`read.csv`**: Reads the CSV file containing the data.
+
+-   **`as.factor`**: Converts specified columns to factor type for categorical variables.
+
+-   **`data0`**: A backup of the original data before any modifications.
+
+# ==============================================================================
+# SECTION 4: DATA STANDARDIZATION
+# ==============================================================================
+
+## Standardizing Column Names
+
+We standardize column names for consistency and ease of use.
+
+```{r}
+# ==============================================================================
+# Standardize Column Names for Analysis
+# ==============================================================================
+
+# Create standardized column names
+data$Conditions <- data$Conditions
+data$Differentiation <- data$DifferentiationA  # Use DifferentiationA as random effect
+data$Replicate <- data$Samples0                # Use Samples0 as replicate identifier
+
+# Create versioned copies for reference
+data1 <- data
+
+# Remove unnecessary columns (keep only measurement columns + metadata)
+# Columns 1,2,3,4,6,7,8 are redundant sample/differentiation identifiers
+data <- data[ , -c(1, 2, 3, 4, 6, 7, 8)]
+data2 <- data
+
+```
+
+**Explanation:**
+
+-   We create a new column **`Differentiation`** based on **`DifferentiationA`**.
+
+-   **`Replicate`** is set to **`Samples0`** to indicate replicate samples.
+
+-   We remove unnecessary columns to focus on relevant data.
+
+# ==============================================================================
+# SECTION 5: LOAD HUMAN-READABLE HEADERS
+# ==============================================================================
+
+## Loading Human-Readable Headers
+
+We load another CSV file that contains human-readable titles or headers for the measurements.
+
+```{r}
+# ==============================================================================
+# Load Column Name Mapping File
+# ==============================================================================
+
+# Load file containing human-readable measurement names
+# Maps code names (e.g., "X1") to descriptive names (e.g., "CD45+ %")
+humanreadble <- read.csv("../../FCA_DATA/FCA_2024_2.csv", check.names = FALSE)
+
+# Keep only first two rows (header mapping)
+humanreadble <- humanreadble[1:2, ]
+```
+
+**Explanation:**
+
+-   The **`humanreadble`** dataframe contains the mapping from code names to human-readable measurement names.
+
+# ==============================================================================
+# SECTION 6: DATA FILTERING
+# ==============================================================================
+
+# Data Filtering
+
+We focus our analysis on the **Atf3 KO** and **NT WT** conditions.
+
+```{r}
+# ==============================================================================
+# Filter Data for Atf3 KO vs NT WT Comparison
+# ==============================================================================
+
+# filter(): Select only rows for the two conditions of interest
+# %in%: Match values in a vector
+data_Atf3_control <- data %>% filter(Conditions %in% c("Atf3 KO", "NT WT"))
+
+# droplevels(): Remove unused factor levels after subsetting
+# Critical for correct statistical modeling
+data_Atf3_control <- droplevels(data_Atf3_control)
+
+```
+
+**Explanation:**
+
+-   **`filter`**: Selects rows where **`Conditions`** is either "Atf3 KO" or "NT WT".
+
+-   **`droplevels`**: Removes unused levels from factor variables.
+
+We also prepare the data with human-readable headers.
+
+```{r}
+# ==============================================================================
+# Create Human-Readable Version of Data
+# ==============================================================================
+
+# Start with original data
+data_hr <- data0
+
+# Replace column names with human-readable names (first row of lookup table)
+colnames(data_hr) <- humanreadble[1, ]
+
+# Verify the column name changes
+head(data_hr)
+```
+
+**Explanation:**
+
+-   We replace the column names in **`data_hr`** with the first row of **`humanreadble`**, which contains the human-readable names.
+
+Filter the human-readable data for Atf3 KO and NT WT conditions.
+
+```{r}
+# ==============================================================================
+# Filter Human-Readable Data
+# ==============================================================================
+
+# Apply same filter to human-readable version
+data_Atf3_control_hr <- data_hr %>% filter(Conditions %in% c("Atf3 KO", "NT WT"))
+
+# Remove unused factor levels
+data_Atf3_control_hr <- droplevels(data_Atf3_control_hr)
+```
+
+# ==============================================================================
+# SECTION 7: MIXED-EFFECTS MODEL FUNCTION
+# ==============================================================================
+
+# Statistical Analysis
+
+We perform mixed-effects linear modeling to assess the differences between conditions.
+
+## Defining the Mixed-Effects Model Function
+
+We define a function **`run_mixed_effects`** that runs a mixed-effects model for a given measurement.
+
+```{r}
+# ==============================================================================
+# Define Mixed-Effects Linear Model Function
+# ==============================================================================
+
+# run_mixed_effects(): Fit LMM for a single measurement variable
+# data: Data frame containing the measurement
+# measurement: Column name of the response variable
+# Returns: List with results data frame and singularity flag
+
+run_mixed_effects <- function(data, measurement) {
+  tryCatch({
+    # Validate input: response variable must be numeric
+    if (!is.numeric(data[[measurement]])) {
+      stop("The response variable must be numeric.")
+    }
+    
+    # ==============================================================================
+    # Fit Linear Mixed-Effects Model
+    # ==============================================================================
+    
+    # lmer(): Fit linear mixed-effects model from lme4 package
+    # Formula: measurement ~ Conditions + (1 | Differentiation)
+    #   - Fixed effect: Conditions (Atf3 KO vs NT WT)
+    #   - Random effect: (1 | Differentiation) - random intercept for each differentiation stage
+    # na.action = na.exclude: Exclude NA values but preserve row alignment
+    mixed_model <- lmer(
+      as.formula(paste(measurement, "~ Conditions + (1 | Differentiation)")), 
+      data = data, 
+      na.action = na.exclude
+    )
+    
+    # ==============================================================================
+    # Check for Singular Fit
+    # ==============================================================================
+    
+    # isSingular(): Check if random effects variance is estimated as zero
+    # Singular fit indicates insufficient variation for random effects
+    if (isSingular(mixed_model)) {
+      warning("Singular fit for measurement ", measurement)
+      return(list(
+        result = data.frame(
+          Measurement = measurement, 
+          Mixed_Effects = NA,
+          Mean_Atf3 = NA,
+          Mean_Control = NA,
+          N_Atf3 = NA,
+          N_Control = NA,
+          Overall_Mean = NA,
+          SD = NA,
+          Median = NA,
+          IQR = NA,
+          AIC = NA,
+          BIC = NA,
+          Effect_Size = NA,
+          CI_Lower = NA,
+          CI_Upper = NA
+        ), 
+        singular = TRUE
+      ))
+    }
+    
+    # ==============================================================================
+    # Extract Model Results
+    # ==============================================================================
+    
+    # summary(): Get model coefficients and statistics
+    mixed_summary <- summary(mixed_model)
+    
+    # Calculate condition-specific means
+    # !!sym(): Convert string to symbol for dplyr evaluation
+    condition_means <- data %>%
+      group_by(Conditions) %>%
+      summarize(Mean = mean(!!sym(measurement), na.rm = TRUE))
+    
+    # Calculate sample sizes per condition
+    condition_n <- data %>%
+      group_by(Conditions) %>%
+      summarize(N = sum(!is.na(!!sym(measurement))))
+    
+    # ==============================================================================
+    # Compile Results Data Frame
+    # ==============================================================================
+    
+    # Extract key statistics:
+    # - Mixed_Effects: p-value for Conditions effect (row 2 of coefficients)
+    # - Effect_Size: Coefficient estimate (difference between conditions)
+    # - CI_Lower/CI_Upper: 95% confidence interval from confint()
+    result <- data.frame(
+      Measurement = measurement, 
+      Mixed_Effects = mixed_summary$coefficients[2, "Pr(>|t|)"],  # p-value
+      Mean_Atf3 = condition_means$Mean[condition_means$Conditions == "Atf3 KO"],
+      Mean_Control = condition_means$Mean[condition_means$Conditions == "NT WT"],
+      N_Atf3 = condition_n$N[condition_n$Conditions == "Atf3 KO"],
+      N_Control = condition_n$N[condition_n$Conditions == "NT WT"],
+      Overall_Mean = mean(data[[measurement]], na.rm = TRUE),
+      SD = sd(data[[measurement]], na.rm = TRUE),
+      Median = median(data[[measurement]], na.rm = TRUE),
+      IQR = IQR(data[[measurement]], na.rm = TRUE),
+      AIC = AIC(mixed_model),  # Akaike Information Criterion
+      BIC = BIC(mixed_model),  # Bayesian Information Criterion
+      Effect_Size = mixed_summary$coefficients[2, "Estimate"],  # Coefficient
+      CI_Lower = confint(mixed_model, oldNames = FALSE)[2, 1],  # Lower 95% CI
+      CI_Upper = confint(mixed_model, oldNames = FALSE)[2, 2]   # Upper 95% CI
+    )
+    
+    return(list(result = result, singular = FALSE))
+    
+  }, error = function(e) {
+    # ==============================================================================
+    # Error Handling
+    # ==============================================================================
+    
+    # Return NA values if model fitting fails
+    message("Error for measurement ", measurement, ": ", e$message)
+    return(list(
+      result = data.frame(
+        Measurement = measurement, 
+        Mixed_Effects = NA,
+        Mean_Atf3 = NA,
+        Mean_Control = NA,
+        N_Atf3 = NA,
+        N_Control = NA,
+        Overall_Mean = NA,
+        SD = NA,
+        Median = NA,
+        IQR = NA,
+        AIC = NA,
+        BIC = NA,
+        Effect_Size = NA,
+        CI_Lower = NA,
+        CI_Upper = NA
+      ), 
+      singular = NA
+    ))
+  })
+}
+
+```
+
+**Explanation:**
+
+-   The function takes **`data`** and a **`measurement`** column name.
+
+-   Fits a mixed-effects model with **`Conditions`** as a fixed effect and **`Differentiation`** as a random effect.
+
+-   Handles singular fits and errors gracefully.
+
+-   Returns a list containing the result and a flag indicating singularity.
+
+# ==============================================================================
+# SECTION 8: RUN MODELS FOR ALL MEASUREMENTS
+# ==============================================================================
+
+## Running the Mixed-Effects Models
+
+We run the mixed-effects model for each numeric measurement in the dataset.
+
+```{r}
+# ==============================================================================
+# Initialize Results Storage
+# ==============================================================================
+
+# Empty data frames to collect results
+mixed_effects_results <- data.frame()       # All results
+significant_mixed_effects <- data.frame()   # Significant results only
+singular_fit_measurements <- c()             # Measurements with singular fits
+
+# Significance threshold (alpha = 0.05)
+significance_threshold <- 0.05
+
+# ==============================================================================
+# Identify Numeric Measurement Columns
+# ==============================================================================
+
+# sapply(): Apply is.numeric to all columns
+# Returns logical vector: TRUE for numeric columns
+measurement_cols <- colnames(data_Atf3_control)[sapply(data_Atf3_control, is.numeric)]
+
+# ==============================================================================
+# Loop Through Each Measurement
+# ==============================================================================
+
+for (measurement in measurement_cols) {
+  if (nrow(data_Atf3_control) > 0) {
+    # Run mixed-effects model for this measurement
+    result <- run_mixed_effects(data_Atf3_control, measurement)
+    
+    # Append to all results
+    mixed_effects_results <- rbind(mixed_effects_results, result$result)
+    
+    # Check if result is significant (p < 0.05)
+    if (!is.na(result$result$Mixed_Effects) && result$result$Mixed_Effects < significance_threshold) {
+      significant_mixed_effects <- rbind(significant_mixed_effects, result$result)
+    }
+    
+    # Track measurements with singular fits
+    if (!is.na(result$singular) && result$singular) {
+      singular_fit_measurements <- c(singular_fit_measurements, measurement)
+    }
+  }
+}
+
+# ==============================================================================
+# Display Results
+# ==============================================================================
+
+# Print all results
+print(mixed_effects_results)
+
+# Print significant results only
+print(significant_mixed_effects)
+
+# List measurements with singular fits (random effect variance = 0)
+cat("Measurements with singular fits:\n")
+print(singular_fit_measurements)
+
+```
+
+**Explanation:**
+
+-   Iterate over each numeric measurement and run the mixed-effects model.
+
+-   Store all results in **`mixed_effects_results`**.
+
+-   Collect significant results in **`significant_mixed_effects`** based on the p-value threshold.
+
+-   Record any measurements that resulted in singular fits.
+
+# ==============================================================================
+# SECTION 9: MAP TO HUMAN-READABLE NAMES
+# ==============================================================================
+
+## Mapping to Human-Readable Measurement Names
+
+We replace the measurement codes with human-readable names for clarity.
+
+```{r}
+# ==============================================================================
+# Create Lookup for Human-Readable Names
+# ==============================================================================
+
+# Convert first row of humanreadble to named list
+# Names are column codes, values are human-readable names
+human_readable_names <- as.list(humanreadble[1, ])
+
+# ==============================================================================
+# Define Replacement Function
+# ==============================================================================
+
+# replace_with_human_readable(): Map codes to readable names
+# measurements: Vector of measurement codes
+# lookup: Named list for mapping
+replace_with_human_readable <- function(measurements, lookup) {
+  sapply(measurements, function(measurement) {
+    if (measurement %in% names(lookup)) {
+      return(lookup[[measurement]])
+    } else {
+      return(measurement)  # Keep original if not in lookup
+    }
+  })
+}
+
+# ==============================================================================
+# Apply Mapping to Results
+# ==============================================================================
+
+# Add human-readable measurement names to all results
+mixed_effects_results$Measurement_hr <- replace_with_human_readable(mixed_effects_results$Measurement, human_readable_names)
+
+# Verify changes
+print(mixed_effects_results)
+
+
+# Add human-readable names to significant results
+significant_mixed_effects$Measurement_hr <- replace_with_human_readable(significant_mixed_effects$Measurement, human_readable_names)
+
+# Verify changes
+print(significant_mixed_effects)
+```
+
+# **Explanation:**
+
+-   Create a lookup list from the **`humanreadble`** dataframe.
+
+-   **`replace_with_human_readable`** function replaces measurement codes with human-readable equivalents.
+
+-   Apply this function to both **`mixed_effects_results`** and **`significant_mixed_effects`**.
+
+# ==============================================================================
+# SECTION 10: PREPARE DATA FOR VISUALIZATION
+# ==============================================================================
+
+# Visualization
+
+We create plots to visualize the results of the mixed-effects models.
+
+## Preparing Data for Plotting
+
+```{r}
+# ==============================================================================
+# Add Significance Labels (GraphPad-Style Stars)
+# ==============================================================================
+
+# cut(): Categorize p-values into significance levels
+# Standard notation: **** (p<0.0001), *** (p<0.001), ** (p<0.01), * (p<0.05), n.s.
+mixed_effects_results$Significance <- cut(
+  mixed_effects_results$Mixed_Effects,
+  breaks = c(-Inf, 0.0001, 0.001, 0.01, 0.05, Inf),
+  labels = c("****", "***", "**", "*", "n.s.")
+)
+
+# ==============================================================================
+# Reshape Data for ggplot2
+# ==============================================================================
+
+# Extract human-readable measurement names
+mixed_effects_results_mixed <- mixed_effects_results$Measurement_hr
+
+# melt(): Convert from wide to long format for faceted plotting
+# id.vars: Columns to keep as identifiers
+# variable.name: Name for the measurement column
+# value.name: Name for the value column
+data_melted_mixed <- data_Atf3_control_hr %>%
+  select(
+    Samples0, Samples1, Samples2, Samples3, Conditions, 
+    DifferentiationA, DifferentiationB, DifferentiationC, 
+    all_of(mixed_effects_results_mixed)
+  ) %>%
+  melt(
+    id.vars = c("Samples0", "Samples1", "Samples2", "Samples3", "Conditions", "DifferentiationA", "DifferentiationB", "DifferentiationC"), 
+    variable.name = "Measurement_hr", 
+    value.name = "Value"
+  )
+
+# ==============================================================================
+# Merge with Statistical Results
+# ==============================================================================
+
+# merge(): Add significance labels to melted data
+data_melted_mixed <- merge(data_melted_mixed, mixed_effects_results, by = "Measurement_hr")
+
+```
+
+**Explanation:**
+
+-   Categorize p-values into significance labels (e.g., "\*\*\*\*" for p \< 0.0001).
+
+-   Prepare the data for plotting by melting it into long format suitable for **`ggplot2`**.
+
+-   Merge the data with the results to include significance labels.
+
+# ==============================================================================
+# SECTION 11: CREATE FACETED VISUALIZATION
+# ==============================================================================
+
+## Creating the Faceted Plot
+
+```{r,fig.width=15, fig.height=8}
+# ==============================================================================
+# Prepare Annotation Positions
+# ==============================================================================
+
+# Calculate y-position for significance annotations
+# Position above maximum value but cap at 98 (for percentage scales)
+annotations_df <- data_melted_mixed %>%
+  group_by(Measurement_hr) %>%
+  summarize(
+    y_position = min(max(Value, na.rm = TRUE) * 1.05, 98),
+    Significance = first(Significance)
+  )
+
+# ==============================================================================
+# Create Faceted Boxplot with Significance Labels
+# ==============================================================================
+
+plot <- ggplot(data_melted_mixed, aes(x = Conditions, y = Value)) +
+  # Boxplot with thin lines, no outliers (shown as jittered points)
+  geom_boxplot(alpha = 1, size = 0.2, outlier.shape = NA) +
+  # Jittered points colored by sample, shaped by differentiation
+  geom_jitter(aes(color = Samples3, shape = DifferentiationC), size = 1.5, width = 0.2, alpha = 1) +
+  # Custom color palette for samples
+  scale_color_manual(values = c("blue", "red", "green", "purple", "orange")) +
+  # Create grid of plots (one per measurement)
+  facet_wrap(~ Measurement_hr, scales = "free", ncol = 11) +
+  labs(
+    title = "Mixed-Effects Results: Atf3-KO vs NT-WT",
+    y = "",
+    x = ""
+  ) +
+  theme_classic() +
+  theme(
+    plot.title = element_blank(),
+    axis.title.y = element_blank(),
+    strip.text = element_text(size = 8),           # Facet labels
+    strip.background = element_blank(),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 6),
+    axis.text.y = element_text(size = 6),
+    axis.ticks = element_line(size = 0.2),
+    axis.line = element_line(size = 0.2),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_text(size = 8, face = "bold"),
+    legend.text = element_text(size = 8, margin = margin(l = 2, unit = "pt")),
+    legend.margin = margin(t = -5),
+    legend.box.margin = margin(t = -10),
+    legend.spacing.x = unit(0.3, 'cm'),
+    legend.spacing.y = unit(0.05, 'cm'),
+    legend.key.size = unit(0, "cm"),
+    legend.key.spacing.x = unit(0.1, "cm"),
+    legend.key.width = unit(0.0, "cm"),
+    legend.key.height = unit(0.0, "cm")
+  ) +
+  guides(
+    color = guide_legend(title = "Samples", nrow = 1), 
+    shape = guide_legend(title = "Differentiation", nrow = 1)
+  ) +
+  # Add significance stars above each facet
+  geom_text(
+    data = annotations_df, 
+    aes(x = 1.5, y = y_position, label = Significance), 
+    vjust = 0.2, hjust = 0.5, size = 2.5, color = "black"
+  )
+
+# Display the plot
+print(plot)
+
+```
+
+**Explanation:**
+
+-   Create a faceted boxplot for each measurement, comparing the two conditions.
+
+-   **`geom_boxplot`**: Plots the boxplots with thin lines.
+
+-   **`geom_jitter`**: Adds individual data points.
+
+-   **`facet_wrap`**: Creates a grid of plots for each measurement.
+
+-   Annotations are added to display the significance level above each plot.
+
+-   **`scale_color_manual`**: Define custom colors for samples.
+
+# ==============================================================================
+# SECTION 12: SAVE PLOT
+# ==============================================================================
+
+## Saving the Plot
+
+```{r}
+# ==============================================================================
+# Export Plot in Multiple Formats
+# ==============================================================================
+
+# ggsave(): Save last plot to file
+# Multiple formats for different use cases:
+# - PNG: Web/presentations
+# - PDF: Publication/vector
+# - SVG: Scalable vector graphics
+ggsave("./plot.png", width = 15, height = 8, units = "in", dpi = 600)
+ggsave("./plot.pdf", width = 15, height = 8, units = "in", dpi = 600)
+ggsave("./plot.svg", width = 15, height = 8, units = "in", dpi = 600)
+
+```
+
+**Explanation:**
+
+-   **`ggsave`**: Saves the last plot to a file in the specified format.
+
+# ==============================================================================
+# SECTION 13: EXPORT RESULTS
+# ==============================================================================
+
+# Exporting the Results
+
+We save the results of the mixed-effects models to text files for further analysis.
+
+```{r}
+# ==============================================================================
+# Export Results to Tab-Separated Files
+# ==============================================================================
+
+# write.table(): Export data frame to text file
+# sep = '\t': Tab-separated format
+# quote = FALSE: Don't quote strings
+# row.names = FALSE: Don't include row numbers
+
+# All results
+write.table(
+  mixed_effects_results,
+  "./mixed_effects_results_Atf3.txt",
+  col.names = TRUE, row.names = FALSE, quote = FALSE, sep = '\t'
+)
+
+# Significant results only
+write.table(
+  significant_mixed_effects,
+  "./significant_mixed_effects_results_Atf3.txt",
+  col.names = TRUE, row.names = FALSE, quote = FALSE, sep = '\t'
+)
+
+```
+
+**Explanation:**
+
+-   **`write.table`**: Exports data frames to text files in tab-delimited format.
+
+# ==============================================================================
+# SECTION 14: SESSION INFORMATION
+# ==============================================================================
+
+# Session Information
+
+Finally, we include the session information to document the R environment used for the analysis.
+
+```{r}
+# ==============================================================================
+# Record Session Information for Reproducibility
+# ==============================================================================
+
+sessionInfo()
+```
+
+**Explanation:**
+
+-   **`sessionInfo`**: Displays information about the R session, including loaded packages and their versions.
