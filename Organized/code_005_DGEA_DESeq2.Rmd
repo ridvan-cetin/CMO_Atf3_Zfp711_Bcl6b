@@ -1,0 +1,569 @@
+---
+title: "Differential Gene Expression Analysis with DESeq2"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+
+Pseudobulked differential gene expression analysis with DESeq2. Process will be repeated for each annotations in groups, clusters and sub-clusters. And number of significant genes will be stored in a table as a summary table.
+
+gene_info can be found in either in github or in the gse.
+
+# ==============================================================================
+# SECTION 1: ENVIRONMENT SETUP AND PACKAGE LOADING
+# ==============================================================================
+
+```{r eval=FALSE}
+# ==============================================================================
+# Load Required Packages
+# ==============================================================================
+
+suppressPackageStartupMessages({
+  library(Seurat)      # Single-cell analysis and pseudobulk aggregation
+  library(DESeq2)      # Differential expression analysis (negative binomial model)
+  library(dplyr)       # Data manipulation
+  library(tibble)      # Enhanced data frames
+  library(ggplot2)     # Visualization
+  library(ggrepel)     # Non-overlapping text labels
+  library(ggvenn)      # Venn diagrams with ggplot2
+  library(venn)        # Venn diagram utilities
+  library(tidyverse)   # Tidyverse ecosystem
+  library(VennDiagram) # Publication-quality Venn diagrams
+  library(cowplot)     # Plot arrangement
+  library(UpSetR)      # UpSet plots for set intersections
+})
+```
+
+
+# ==============================================================================
+# SECTION 2: DATA LOADING
+# ==============================================================================
+
+# Data Preprocessing
+
+Example code for analysis. It will be repeated for conditions which desired.
+
+```{r  eval=FALSE}
+# ==============================================================================
+# Load Seurat Object and Gene Annotation
+# ==============================================================================
+
+# Load the Atf3 KO vs Control subset
+Atf3NT <- readRDS("~/cmo_chapter_v1/Analysis/RDS/CMO/cmo_CA.RDS")
+
+# Load gene annotation file (gene symbol to Ensembl ID mapping)
+# Extracted from CellRanger's annotation file
+gene_info <- read.csv("~/cmo_chapter/figs/DEG/gene_info.csv")
+# Gene_info is extracted from cellranger's annotation file contains gene symbol and ensmbl name. 
+```
+
+# ==============================================================================
+# SECTION 3: PSEUDOBULK AGGREGATION - SUBCLUSTER LEVEL (cl_3)
+# ==============================================================================
+
+```{r  eval=FALSE}
+# ==============================================================================
+# Setup Analysis Parameters
+# ==============================================================================
+
+# Set active identity to subcluster level
+Idents(Atf3NT) <- "cl_3"
+
+# Define the gene being knocked out (used to identify KO samples)
+gene_of_interest <- "Atf3"
+
+# Create output directory for results
+output_folder <- "DESeq2_results_Atf3_cl_3"
+dir.create(output_folder, showWarnings = FALSE)
+
+# ==============================================================================
+# Clean Factor Levels
+# ==============================================================================
+
+# droplevels(): Remove unused factor levels from previous subsetting
+# Critical for correct pseudobulk aggregation
+Atf3NT$Samples <- droplevels(Atf3NT$Samples_lv)
+Atf3NT$c_groups <- droplevels(Atf3NT$cl_3)
+
+# Get unique cluster names for iteration
+cluster_names <- unique(Atf3NT$c_groups)
+
+# ==============================================================================
+# Calculate Average Expression of Target Gene
+# ==============================================================================
+
+# AverageExpression(): Calculate mean expression per cluster
+# Used to track target gene expression across clusters
+exp <- AverageExpression(Atf3NT, features = "Atf3")
+exp <- exp$RNA
+exp <- as.data.frame(exp)
+
+# ==============================================================================
+# Create Pseudobulk Count Matrix
+# ==============================================================================
+
+# AggregateExpression(): Sum counts across cells within each group
+# group.by: Aggregate by cluster AND sample (for replicates)
+# slot = "counts": Use raw counts (required for DESeq2)
+# return.seurat = F: Return matrix, not Seurat object
+cts <- AggregateExpression(Atf3NT, group.by = c("c_groups", "Samples"),
+                           assays = "RNA",
+                           slot = "counts",
+                           return.seurat = F)
+
+# ==============================================================================
+# Reshape Pseudobulk Matrix for DESeq2
+# ==============================================================================
+
+# Extract RNA counts
+cts <- cts$RNA
+
+# Transpose: genes become rows, samples become columns
+cts.t <- t(cts)
+cts.t <- as.data.frame(cts.t)
+
+# Extract cluster names from row names (format: "ClusterName_SampleName")
+# gsub('_.*', '', ...): Remove everything after first underscore
+splitRows <- gsub('_.*', '', rownames(cts.t))
+
+# Split data frame by cluster
+# Creates list: one element per cluster
+cts.split <- split.data.frame(cts.t, f = factor(splitRows))
+
+# Fix row names (keep only sample name) and transpose back
+# lapply: Apply function to each cluster's data frame
+cts.split.modified <- lapply(cts.split, function(x){
+  # gsub('.*_(.*)', '\\1', ...): Keep only text after underscore
+  rownames(x) <- gsub('.*_(.*)', '\\1', rownames(x))
+  t(x)  # Transpose: genes as rows, samples as columns
+})
+```
+
+# ==============================================================================
+# SECTION 4: DESEQ2 ANALYSIS LOOP - SUBCLUSTER LEVEL
+# ==============================================================================
+
+```{r  eval=FALSE}
+# ==============================================================================
+# Initialize Summary Data Frame
+# ==============================================================================
+
+# Create empty data frame to store DEG counts across all clusters
+# Tracks multiple significance thresholds and directions
+summary_dataframe <- data.frame(
+  cluster = character(),
+  average_expression = integer(),      # Target gene expression in cluster
+  total_genes = integer(),             # Total genes before filtering
+  included_genes = integer(),          # Genes passing filter
+  excluded_genes = integer(),          # Genes filtered out
+  padj_0_01 = integer(),               # DEGs at padj < 0.01
+  upregulated_genes_padj_0_01 = integer(),
+  downregulated_genes_padj_0_01 = integer(),
+  padj_0_05 = integer(),               # DEGs at padj < 0.05
+  upregulated_genes_padj_0_05 = integer(),
+  downregulated_genes_padj_0_05 = integer(),
+  padj_0_1 = integer(),                # DEGs at padj < 0.1
+  upregulated_genes_padj_0_1 = integer(),
+  downregulated_genes_padj_0_1 = integer(),
+  pvalue_0_05 = integer(),             # DEGs at raw p < 0.05
+  upregulated_genes_pvalue_0_05 = integer(),
+  downregulated_genes_pvalue_0_05 = integer(),
+  stringsAsFactors = FALSE
+)
+
+# ==============================================================================
+# Loop Through Each Cluster
+# ==============================================================================
+
+for (cluster_name in cluster_names) {
+  if (cluster_name %in% names(cts.split.modified)) {
+    # Extract count matrix for this cluster
+    counts_cluster <- cts.split.modified[[cluster_name]]
+
+    # Get average expression of target gene in this cluster
+    avg_exp <- exp[[cluster_name]]
+    
+    # ==============================================================================
+    # Create Sample Metadata (colData)
+    # ==============================================================================
+    
+    # Create data frame with sample names
+    colData <- data.frame(samples = colnames(counts_cluster))
+    
+    # Assign condition based on sample name
+    # grepl(): Check if gene name appears in sample name
+    # KO samples contain the gene name, NT (Non-Targeting) do not
+    colData <- colData %>%
+      mutate(condition = ifelse(grepl(gene_of_interest, samples), 'KO', 'NT')) %>%
+      column_to_rownames(var = 'samples')
+    
+    # ==============================================================================
+    # Create DESeq2 Dataset
+    # ==============================================================================
+    
+    # DESeqDataSetFromMatrix(): Create DESeq2 object from count matrix
+    # countData: Gene x Sample count matrix
+    # colData: Sample metadata with conditions
+    # design: Formula specifying the comparison (KO vs NT)
+    dds <- DESeqDataSetFromMatrix(countData = counts_cluster,
+                                  colData = colData,
+                                  design = ~ condition)
+
+    # ==============================================================================
+    # Pre-filtering Low-Count Genes
+    # ==============================================================================
+    
+    # Filter genes with very low counts (improves power)
+    smallestGroupSize <- 3  # Minimum replicates per condition
+    total_genes_before <- nrow(dds)
+    
+    # Keep genes with >= 10 counts in at least 3 samples
+    keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
+    dds <- dds[keep,]
+    total_genes_after <- nrow(dds)
+    
+    # ==============================================================================
+    # Run DESeq2 Analysis
+    # ==============================================================================
+    
+    # relevel(): Set reference level for comparison
+    # ref = "NT": Non-targeting control as reference
+    # Positive logFC = higher in KO, Negative logFC = lower in KO
+    dds$condition <- relevel(dds$condition, ref = "NT")
+    
+    # DESeq(): Run full DESeq2 pipeline
+    # 1. Estimate size factors (normalization)
+    # 2. Estimate dispersions
+    # 3. Fit negative binomial GLM
+    # 4. Wald test for significance
+    dds <- DESeq(dds)
+    
+    # results(): Extract results table
+    res <- results(dds)
+    
+    # Order by p-value (most significant first)
+    resOrdered <- res[order(res$pvalue),]
+    
+    # Convert to tibble with gene names as column
+    resOrdered <- resOrdered %>%
+      data.frame() %>%
+      rownames_to_column(var = "gene") %>%
+      as_tibble()
+    
+    # ==============================================================================
+    # Merge with Gene Annotation
+    # ==============================================================================
+    
+    # Add Ensembl IDs and other gene info
+    # merge(): Left join to keep all DESeq2 results
+    resOrdered_enhanced <- merge(resOrdered, gene_info, 
+                                 by.x = "gene", by.y = "gene_symbol", 
+                                 all.x = TRUE)
+
+    # ==============================================================================
+    # Save Results
+    # ==============================================================================
+    
+    # Save DESeq2 results object (for further analysis)
+    save(res, file = paste0(output_folder, "/", cluster_name, "_res.RData"))
+    
+    # Save enhanced results with gene info
+    save(resOrdered_enhanced, file = paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.RData"))
+    
+    # Export as tab-separated text
+    write.table(resOrdered_enhanced, 
+                file = paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.txt"), 
+                sep = '\t', quote = F, row.names = F)
+    
+    # Save DESeq2 dataset object (for QC plots)
+    save(dds, file = paste0(output_folder, "/", cluster_name, "_dds.RData"))
+    
+    # Save raw pseudobulk counts
+    write.table(counts_cluster, 
+                file = paste0(output_folder, "/", cluster_name, "_counts_cluster_table.txt"), 
+                sep = '\t', quote = F, row.names = F)
+
+    # ==============================================================================
+    # Calculate Summary Statistics
+    # ==============================================================================
+    
+    # Handle NA values (genes with no valid test)
+    complete_cases <- complete.cases(resOrdered_enhanced$padj, 
+                                     resOrdered_enhanced$log2FoldChange)
+
+    # Add row to summary data frame with DEG counts at multiple thresholds
+    summary_dataframe <- rbind(summary_dataframe, 
+                               data.frame(
+                                 cluster = cluster_name,
+                                 average_expression = avg_exp,
+                                 total_genes = total_genes_before,
+                                 included_genes = total_genes_after,
+                                 excluded_genes = total_genes_before - total_genes_after,
+                                 # padj < 0.01 threshold
+                                 padj_0_01 = sum(complete_cases & resOrdered_enhanced$padj < 0.01, na.rm = TRUE),
+                                 upregulated_genes_padj_0_01 = sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_01 = sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 # padj < 0.05 threshold
+                                 padj_0_05 = sum(complete_cases & resOrdered_enhanced$padj < 0.05, na.rm = TRUE),
+                                 upregulated_genes_padj_0_05 = sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_05 = sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 # padj < 0.1 threshold
+                                 padj_0_1 = sum(complete_cases & resOrdered_enhanced$padj < 0.1, na.rm = TRUE),
+                                 upregulated_genes_padj_0_1 = sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_1 = sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 # Raw p-value < 0.05 (less stringent)
+                                 pvalue_0_05 = sum(complete_cases & resOrdered_enhanced$pvalue < 0.05, na.rm = TRUE),
+                                 upregulated_genes_pvalue_0_05 = sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_pvalue_0_05 = sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE)
+                               ))
+  }
+}
+```
+
+# ==============================================================================
+# SECTION 5: EXPORT SUBCLUSTER SUMMARY
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Save Summary Statistics
+# ==============================================================================
+
+# Export summary of DEG counts across all subclusters
+write.csv(summary_dataframe, 
+          file = paste0(output_folder, "/summary_dataframe.csv"), 
+          row.names = FALSE)
+```
+
+# ==============================================================================
+# SECTION 6: PSEUDOBULK AGGREGATION - CLUSTER LEVEL (cl_2)
+# ==============================================================================
+
+```{r  eval=FALSE}
+# ==============================================================================
+# Switch to Cluster Level Analysis
+# ==============================================================================
+
+# Change identity to cluster level (coarser than subclusters)
+Idents(Atf3NT) <- "cl_2"
+levels(Atf3NT)
+```
+
+```{r eval=FALSE}
+# ==============================================================================
+# Initialize Summary Data Frame for Cluster Level
+# ==============================================================================
+
+# Same structure as subcluster analysis
+summary_dataframe <- data.frame(
+  cluster = character(),
+  average_expression = integer(),
+  total_genes = integer(),
+  included_genes = integer(),
+  excluded_genes = integer(),
+  padj_0_01 = integer(),
+  upregulated_genes_padj_0_01 = integer(),
+  downregulated_genes_padj_0_01 = integer(),
+  padj_0_05 = integer(),
+  upregulated_genes_padj_0_05 = integer(),
+  downregulated_genes_padj_0_05 = integer(),
+  padj_0_1 = integer(),
+  upregulated_genes_padj_0_1 = integer(),
+  downregulated_genes_padj_0_1 = integer(),
+  pvalue_0_05 = integer(),
+  upregulated_genes_pvalue_0_05 = integer(),
+  downregulated_genes_pvalue_0_05 = integer(),
+  stringsAsFactors = FALSE
+)
+```
+
+```{r eval=FALSE}
+# ==============================================================================
+# Setup Cluster Level Analysis
+# ==============================================================================
+
+# Set identity and parameters for cluster level
+Idents(Atf3NT) <- "cl_2"
+Atf3NT$ident <- Atf3NT$cl_2
+
+gene_of_interest <- "Atf3"
+output_folder <- "DESeq2_results_Atf3_cl_2"
+dir.create(output_folder, showWarnings = FALSE)
+
+# Clean factor levels
+Atf3NT$Samples <- droplevels(Atf3NT$Samples_lv)
+Atf3NT$c_groups <- droplevels(Atf3NT$cl_2)
+
+# ==============================================================================
+# Calculate Average Expression
+# ==============================================================================
+
+exp <- AverageExpression(Atf3NT, features = "Atf3")
+exp <- exp$RNA
+exp <- as.data.frame(exp)
+
+# ==============================================================================
+# Create Pseudobulk Counts
+# ==============================================================================
+
+cts <- AggregateExpression(Atf3NT, group.by = c("c_groups", "Samples"),
+                           assays = "RNA",
+                           slot = "counts",
+                           return.seurat = F)
+
+# Reshape for DESeq2 (same process as subcluster level)
+cts <- cts$RNA
+cts.t <- t(cts)
+cts.t <- as.data.frame(cts.t)
+splitRows <- gsub('_.*', '', rownames(cts.t))
+cts.split <- split.data.frame(cts.t, f = factor(splitRows))
+cts.split.modified <- lapply(cts.split, function(x){
+  rownames(x) <- gsub('.*_(.*)', '\\1', rownames(x))
+  t(x)
+})
+
+# Get cluster names from the split list
+cluster_names <- names(cts.split.modified)
+```
+
+# ==============================================================================
+# SECTION 7: DESEQ2 ANALYSIS LOOP - CLUSTER LEVEL
+# ==============================================================================
+
+```{r  eval=FALSE}
+# ==============================================================================
+# Initialize Summary Data Frame
+# ==============================================================================
+
+summary_dataframe <- data.frame(
+  cluster = character(),
+  average_expression = integer(),
+  total_genes = integer(),
+  included_genes = integer(),
+  excluded_genes = integer(),
+  padj_0_01 = integer(),
+  upregulated_genes_padj_0_01 = integer(),
+  downregulated_genes_padj_0_01 = integer(),
+  padj_0_05 = integer(),
+  upregulated_genes_padj_0_05 = integer(),
+  downregulated_genes_padj_0_05 = integer(),
+  padj_0_1 = integer(),
+  upregulated_genes_padj_0_1 = integer(),
+  downregulated_genes_padj_0_1 = integer(),
+  pvalue_0_05 = integer(),
+  upregulated_genes_pvalue_0_05 = integer(),
+  downregulated_genes_pvalue_0_05 = integer(),
+  stringsAsFactors = FALSE
+)
+
+# ==============================================================================
+# Loop Through Each Cluster (Same Logic as Subcluster Level)
+# ==============================================================================
+
+for (cluster_name in cluster_names) {
+  if (cluster_name %in% names(cts.split.modified)) {
+    counts_cluster <- cts.split.modified[[cluster_name]]
+
+    # Get average expression
+    avg_exp <- exp[[cluster_name]]
+
+    # Create sample metadata
+    colData <- data.frame(samples = colnames(counts_cluster))
+    colData <- colData %>%
+      mutate(condition = ifelse(grepl(gene_of_interest, samples), 'KO', 'NT')) %>%
+      column_to_rownames(var = 'samples')
+    
+    # Create DESeq2 object
+    dds <- DESeqDataSetFromMatrix(countData = counts_cluster,
+                                  colData = colData,
+                                  design = ~ condition)
+
+    # Pre-filtering
+    smallestGroupSize <- 3
+    total_genes_before <- nrow(dds)
+    keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
+    dds <- dds[keep,]
+    total_genes_after <- nrow(dds)
+    
+    # DESeq2 analysis
+    dds$condition <- relevel(dds$condition, ref = "NT")
+    dds <- DESeq(dds)
+    res <- results(dds)
+    resOrdered <- res[order(res$pvalue),]
+    
+    resOrdered <- resOrdered %>%
+      data.frame() %>%
+      rownames_to_column(var = "gene") %>%
+      as_tibble()
+    
+    # Merge with gene annotation
+    resOrdered_enhanced <- merge(resOrdered, gene_info, 
+                                 by.x = "gene", by.y = "gene_symbol", 
+                                 all.x = TRUE)
+
+    # Save results
+    save(res, file = paste0(output_folder, "/", cluster_name, "_res.RData"))
+    save(resOrdered_enhanced, file = paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.RData"))
+    write.table(resOrdered_enhanced, 
+                file = paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.txt"), 
+                sep = '\t', quote = F, row.names = F)
+    save(dds, file = paste0(output_folder, "/", cluster_name, "_dds.RData"))
+    write.table(counts_cluster, 
+                file = paste0(output_folder, "/", cluster_name, "_counts_cluster_table.txt"), 
+                sep = '\t', quote = F, row.names = F)
+
+    # Calculate summary statistics
+    complete_cases <- complete.cases(resOrdered_enhanced$padj, 
+                                     resOrdered_enhanced$log2FoldChange)
+
+    # Add to summary
+    summary_dataframe <- rbind(summary_dataframe, 
+                               data.frame(
+                                 cluster = cluster_name,
+                                 average_expression = avg_exp,
+                                 total_genes = total_genes_before,
+                                 included_genes = total_genes_after,
+                                 excluded_genes = total_genes_before - total_genes_after,
+                                 padj_0_01 = sum(complete_cases & resOrdered_enhanced$padj < 0.01, na.rm = TRUE),
+                                 upregulated_genes_padj_0_01 = sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_01 = sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 padj_0_05 = sum(complete_cases & resOrdered_enhanced$padj < 0.05, na.rm = TRUE),
+                                 upregulated_genes_padj_0_05 = sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_05 = sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 padj_0_1 = sum(complete_cases & resOrdered_enhanced$padj < 0.1, na.rm = TRUE),
+                                 upregulated_genes_padj_0_1 = sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_1 = sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 pvalue_0_05 = sum(complete_cases & resOrdered_enhanced$pvalue < 0.05, na.rm = TRUE),
+                                 upregulated_genes_pvalue_0_05 = sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_pvalue_0_05 = sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE)
+                               ))
+  }
+}
+```
+
+# ==============================================================================
+# SECTION 8: EXPORT CLUSTER SUMMARY
+# ==============================================================================
+
+```{r eval=FALSE}
+# ==============================================================================
+# Save Cluster Level Summary
+# ==============================================================================
+
+write.csv(summary_dataframe, 
+          file = paste0(output_folder, "/summary_dataframe.csv"), 
+          row.names = FALSE)
+```
+
+# ==============================================================================
+# SECTION 9: SESSION INFORMATION
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Record Session Information for Reproducibility
+# ==============================================================================
+
+sessionInfo()
+```

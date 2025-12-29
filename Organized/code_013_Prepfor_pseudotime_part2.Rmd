@@ -1,0 +1,254 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# ==============================================================================
+# PREP FOR PSEUDOTIME - PART 2: ATLAS ENDPOINT SELECTION
+# ==============================================================================
+# Purpose: Interactive selection of trajectory endpoint cells in the Atlas
+# Method: CellSelector() for manual identification of terminal cells
+# Output: Cell IDs for each lineage endpoint (used in Slingshot)
+# ==============================================================================
+
+
+# ==============================================================================
+# SECTION 1: ENVIRONMENT SETUP
+# ==============================================================================
+# Load Atlas and create UMAP for interactive selection
+
+```{r}
+# ------------------------------------------------------------------------------
+# Load Extended Mouse Gastrulation Atlas
+# ------------------------------------------------------------------------------
+# 430,339 cells with celltype_extended_atlas annotations
+library(Seurat)
+atlas <- readRDS("~/scRIPT/000_io_dir/outputs/rds_files/extended_atlas_cellranger_features_seurat.rds")
+
+# ------------------------------------------------------------------------------
+# Create UMAP Plot for CellSelector
+# ------------------------------------------------------------------------------
+# DimPlot(): Visualize cells colored by cell type
+# NoAxes(), NoLegend(): Clean display for selection
+p <- DimPlot(atlas, reduction = "UMAP", group.by = 'celltype_extended_atlas',label = TRUE, alpha = 0.5)+ NoAxes()+NoLegend() 
+```
+
+```{r}
+# ------------------------------------------------------------------------------
+# Check Developmental Stage Distribution
+# ------------------------------------------------------------------------------
+table(atlas$stage)
+```
+
+```{r}
+
+```
+
+
+# ==============================================================================
+# SECTION 2: BLOOD LINEAGE ENDPOINTS
+# ==============================================================================
+
+
+# EMP
+# ------------------------------------------------------------------------------
+# Erythro-Myeloid Progenitor - Terminal endpoint for EMP trajectory
+# ------------------------------------------------------------------------------
+```{r}
+emp_candidates <- CellSelector(p)
+emp_candidates
+```
+```{r}
+# Verify cell type and stage of selected cell
+atlas@meta.data[emp_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_328761 
+
+
+# MkP
+# ------------------------------------------------------------------------------
+# Megakaryocyte Progenitor - Terminal endpoint for platelet lineage
+# ------------------------------------------------------------------------------
+```{r}
+MkP_candidates <- CellSelector(p)
+MkP_candidates
+```
+```{r}
+atlas@meta.data[MkP_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_329685
+
+
+# Erythroid
+# ------------------------------------------------------------------------------
+# Erythroid - Terminal endpoint for red blood cell lineage
+# ------------------------------------------------------------------------------
+```{r}
+Erythroid_candidates <- CellSelector(p)
+Erythroid_candidates
+```
+```{r}
+atlas@meta.data[Erythroid_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_189604
+
+
+# ==============================================================================
+# SECTION 3: ENDOTHELIAL LINEAGE ENDPOINTS
+# ==============================================================================
+
+
+# YS Endothelium
+# ------------------------------------------------------------------------------
+# Yolk Sac Endothelium - Terminal endpoint for YS vascular lineage
+# ------------------------------------------------------------------------------
+```{r}
+YSE_candidates <- CellSelector(p)
+YSE_candidates
+```
+```{r}
+atlas@meta.data[YSE_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_14984
+
+
+# Endocardium
+# ------------------------------------------------------------------------------
+# Endocardium - Terminal endpoint for cardiac endothelial lineage
+# ------------------------------------------------------------------------------
+```{r}
+Endocardium_candidates <- CellSelector(p)
+Endocardium_candidates
+```
+```{r}
+atlas@meta.data[Endocardium_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_343138
+
+
+# ==============================================================================
+# SECTION 4: MESODERM LINEAGE ENDPOINTS
+# ==============================================================================
+
+
+# YSM
+# ------------------------------------------------------------------------------
+# Yolk Sac Mesoderm - Terminal endpoint for YS mesoderm lineage
+# ------------------------------------------------------------------------------
+```{r}
+YSM_candidates <- CellSelector(p)
+YSM_candidates
+```
+```{r}
+atlas@meta.data[YSM_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_343138
+
+
+# Mesenchyme
+# ------------------------------------------------------------------------------
+# Mesenchyme - Terminal endpoint for mesenchymal lineage
+# ------------------------------------------------------------------------------
+```{r}
+Mesenchyme_candidates <- CellSelector(p)
+Mesenchyme_candidates
+
+atlas@meta.data[Mesenchyme_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_325578
+
+
+# Allantois
+# ------------------------------------------------------------------------------
+# Allantois - Terminal endpoint for allantois lineage
+# ------------------------------------------------------------------------------
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_194268
+
+
+# Epicardium
+# ------------------------------------------------------------------------------
+# Epicardium - Terminal endpoint for epicardial lineage
+# ------------------------------------------------------------------------------
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_7917
+
+
+# Cardiomyocytes
+# ------------------------------------------------------------------------------
+# Cardiomyocytes - Terminal endpoint for cardiac muscle lineage
+# ------------------------------------------------------------------------------
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_172850
+
+
+# Limb Mesoderm
+# ------------------------------------------------------------------------------
+# Limb Mesoderm - Terminal endpoint for limb bud mesoderm
+# ------------------------------------------------------------------------------
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_318387
+
+
+# Lateral Plate Mesoderm
+# ------------------------------------------------------------------------------
+# Lateral Plate Mesoderm - Terminal endpoint for LPM lineage
+# ------------------------------------------------------------------------------
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+ext_cell_29525
+
+
+# ==============================================================================
+# SECTION 5: STARTING POINT
+# ==============================================================================
+
+
+# Epiblast
+# ------------------------------------------------------------------------------
+# Epiblast - Starting point for all trajectories
+# ------------------------------------------------------------------------------
+```{r}
+Allantois_candidates <- CellSelector(p)
+Allantois_candidates
+
+atlas@meta.data[Allantois_candidates,c("celltype_extended_atlas","stage") ]
+```
+cell_5856
+
+
+# ==============================================================================
+# SECTION 6: VERIFY SELECTED CELLS
+# ==============================================================================
+
+```{r}
+# ------------------------------------------------------------------------------
+# Confirm Epiblast Starting Point Cells
+# ------------------------------------------------------------------------------
+atlas@meta.data[c('cell_5856',"cell_15629"),c("celltype_extended_atlas","stage") ]
+```
+

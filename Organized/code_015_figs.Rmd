@@ -1,0 +1,469 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+<!-- ==============================================================================
+SECTION 1: ENVIRONMENT SETUP
+==============================================================================
+Purpose: Generate publication-quality figures for manuscript
+Dependencies: Seurat, ggplot2, cowplot, pheatmap, viridis
+============================================================================== -->
+
+```{r}
+# Load Seurat for single-cell analysis
+library(Seurat)
+```
+
+<!-- ==============================================================================
+SECTION 2: LOAD DATA
+==============================================================================
+Load CMO dataset version 4 (final annotated version)
+============================================================================== -->
+
+```{r}
+# Load CMO Seurat object
+obj <- readRDS("~/PhD_Projects/CMO/cmo_version4.rds")
+```
+
+<!-- ==============================================================================
+SECTION 3: HOX GENE ANALYSIS
+==============================================================================
+Extract Hox gene families for visualization
+Hox genes are key regulators of anterior-posterior patterning
+============================================================================== -->
+
+```{r}
+# Define Hox gene families by cluster
+hox_genes <- list()
+hox_genes$hoxa_genes <- grep("^Hoxa", rownames(obj), value = TRUE)  # Hoxa cluster
+hox_genes$hoxb_genes <- grep("^Hoxb", rownames(obj), value = TRUE)  # Hoxb cluster
+hox_genes$hoxc_genes <- grep("^Hoxc", rownames(obj), value = TRUE)  # Hoxc cluster
+hox_genes$hoxd_genes <- grep("^Hoxd", rownames(obj), value = TRUE)  # Hoxd cluster
+```
+
+```{r}
+library(ggplot2)
+```
+
+<!-- ==============================================================================
+SECTION 4: HOX DOTPLOT VISUALIZATION
+==============================================================================
+DotPlot: Show expression of all Hox genes across cell types
+Horizontal lines highlight specific cell type boundaries
+============================================================================== -->
+
+```{r,fig.width=15, fig.height=5}
+# Create DotPlot for individual Hox genes
+hox_pl_a <- DotPlot(obj, features = hox_genes, scale.by = "size") + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 15)) + 
+  geom_hline(yintercept = c(7.5, 9.5), color = "red") +  # Highlight boundaries
+  xlab("") + ylab("")
+hox_pl_a
+```
+
+```{r}
+# Create DotPlot for Hox module scores
+# score_hoxa/b/c/d: Pre-computed module scores from AddModuleScore()
+hox_pl_b <- DotPlot(obj, features = c("score_hoxa", "score_hoxb", "score_hoxc", "score_hoxd")) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 15)) +
+  xlab("") + ylab("") + NoLegend()
+hox_pl_b
+```
+
+```{r}
+library(cowplot)
+```
+
+<!-- ==============================================================================
+SECTION 5: COMBINE HOX PLOTS
+==============================================================================
+Use cowplot::plot_grid() to combine module scores and individual genes
+============================================================================== -->
+
+```{r,fig.width=20, fig.height=5}
+# Combine plots with relative widths (scores = 4, individual genes = 16)
+hox_pl_ab <- plot_grid(hox_pl_b, hox_pl_a, ncol = 2, rel_widths = c(4, 16))
+hox_pl_ab
+```
+
+<!-- ==============================================================================
+SECTION 6: EXPORT HOX FIGURES
+==============================================================================
+Save as PNG (600 DPI) and PDF for publication
+============================================================================== -->
+
+```{r}
+# Export as PNG (high resolution)
+png(filename = "~/PhD_Projects/CMO/Bioinformatic_Analysis/step_16_figures/hox_dotplots.png",
+    width = 20, height = 5, units = "in", res = 600)
+hox_pl_ab
+dev.off()
+```
+
+```{r}
+# Export as PDF (vector format)
+pdf("~/PhD_Projects/CMO/Bioinformatic_Analysis/step_16_figures/hox_dotplots.pdf",
+    width = 20, height = 5)
+hox_pl_ab
+dev.off()
+```
+
+<!-- ==============================================================================
+SECTION 7: MARKER GENE HEATMAP
+==============================================================================
+Define key marker genes for cell type identification:
+- Pluripotency: Zfp42, Pim2
+- Primitive streak/mesoderm: T, Tacstd2, Dnd1, Sox17, Eomes
+- Hox patterning: Hoxb2, Hoxa9
+- Interferon response: Ifit1
+- Hematopoietic: Tal1, Hba-x, Ptprc
+- Endothelial: Vwf, Cdh5
+- KO target genes: Atf3, Jdp2, Fos, Fosb, Fosl1, Fosl2, Batf, Batf3
+- Zfp711 family: Zfp711, Zfx, Zfy1, Zfy2
+- Bcl6b family: Bcl6b, Bcl6
+============================================================================== -->
+
+```{r}
+# Define marker gene list organized by biological function
+genes <- c("Zfp42", 'Pim2', "T", 'Tacstd2', 'Dnd1', 'Sox17', "Eomes", "Hoxb2", "Hoxa9", 
+           "Ifit1", "Tal1", 'Hba-x', "Vwf", "Cdh5", "Ptprc",
+           "Atf3", "Jdp2", "Fos", "Fosl1", "Fosb", "Fosl2", "Batf", "Batf3",
+           "Zfp711", "Zfx", "Zfy1", "Zfy2",
+           "Bcl6b", "Bcl6")
+```
+
+```{r}
+library(Matrix)
+library(pheatmap)
+```
+
+<!-- ==============================================================================
+SECTION 8: COMPUTE AVERAGE EXPRESSION
+==============================================================================
+AverageExpression(): Calculate mean expression per cluster
+============================================================================== -->
+
+```{r}
+# Calculate average expression per cluster
+avg_genes <- AverageExpression(obj, features = genes, group.by = 'new_clusters')
+```
+
+```{r}
+# Convert to dense matrix for pheatmap
+dense_matrix_genes <- as.matrix(avg_genes$RNA)
+```
+
+```{r}
+head(dense_matrix_genes)
+```
+
+```{r}
+library(viridisLite)
+library(viridis)
+```
+
+```{r}
+# Transpose for cluster rows x gene columns layout
+dense_matrix_genes <- t(dense_matrix_genes)
+```
+
+<!-- ==============================================================================
+SECTION 9: PHEATMAP VISUALIZATION
+==============================================================================
+Create heatmap with:
+- Column scaling (z-score per gene)
+- No clustering (preserve annotation order)
+- Viridis color palette
+============================================================================== -->
+
+```{r, fig.width=10, fig.height=5}
+pheatmap(
+  dense_matrix_genes,
+  scale = "column",                        # Z-score per gene (column)
+  clustering_distance_rows = "euclidean",  # Distance metric
+  cluster_rows = FALSE,                    # Preserve cluster order
+  cluster_cols = FALSE,                    # Preserve gene order
+  show_rownames = TRUE,                    # Display cluster names
+  show_colnames = TRUE,                    # Display gene names
+  fontsize_row = 10,                       # Row label font size
+  fontsize_col = 10,                       # Column label font size
+  color = viridis(100),                    # Viridis color palette
+  border_color = "lightgrey",              # Cell border color
+  cellwidth = 18,                          # Cell width (pixels)
+  cellheight = 18,                         # Cell height (pixels)
+)
+```
+
+<!-- ==============================================================================
+SECTION 10: EXPORT HEATMAP
+============================================================================== -->
+
+```{r}
+# Export as PNG
+png(filename = "~/PhD_Projects/CMO/Bioinformatic_Analysis/step_16_figures/avg_genes.png",
+    width = 10, height = 5, units = "in", res = 600)
+ 
+pheatmap(
+  dense_matrix_genes,
+  scale = "column",
+  clustering_distance_rows = "euclidean",
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  fontsize_row = 10,
+  fontsize_col = 10,
+  color = viridis(100),
+  border_color = "lightgrey",
+  cellwidth = 18,
+  cellheight = 18,
+)
+
+dev.off()
+```
+
+```{r}
+# Export as PDF
+pdf("~/PhD_Projects/CMO/Bioinformatic_Analysis/step_16_figures/avg_genes.pdf",
+    width = 10, height = 5)
+pheatmap(
+  dense_matrix_genes,
+  scale = "column",
+  clustering_distance_rows = "euclidean",
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  fontsize_row = 10,
+  fontsize_col = 10,
+  color = viridis(100),
+  border_color = "lightgrey",
+  cellwidth = 18,
+  cellheight = 18,
+)
+dev.off()
+```
+
+<!-- ==============================================================================
+SECTION 11: COLOR PALETTES
+==============================================================================
+Custom color palettes for consistent visualization across figures
+============================================================================== -->
+
+```{r}
+# Define custom color palettes
+r3dcol <- list()
+
+# 94-color palette for extended cell type visualization
+r3dcol$cols_94 <-
+  c("#F0E442", "#1CE6FF", "#FF34FF", "#FF4A46", "#008941", "#006FA6", "#A30059", "#FFDBE5", "#7A4900",
+    "#0089A3", "#63FFAC", "#B79762", "#004D43", "#8FB0FF", "#997D87", "#809693", "#6A3A4C", "#b4b701",
+    "#4FC601", "#3B5DFF", "#FF2F80", "#61615A", "#BA0900", "#6B7900", "#00C2A0", "#FFAA92", "#FF90C9",   
+    "#B903AA", "#D16100", "#922329", "#7B4F4B", "#A1C299", "#0AA6D8", "#00846F", "#FFB500", "#C2FFED", 
+    "#A079BF", "#CC0744", "#C0B9B2", "#C2FF99", "#00489C", "#6F0062", "#0CBD66", "#EEC3FF", "#456D75",    
+    "#B77B68", "#7A87A1", "#788D66", "#885578", "#FAD09F", "#FF8A9A", "#D157A0", "#BEC459", "#456648",  
+    "#0086ED", "#886F4C", "#34362D", "#B4A8BD", "#00A6AA", "#452C2C", "#636375", "#A3C8C9", "#FF913F",  
+    "#938A81", "#575329", "#00FECF", "#B05B6F", "#8CD0FF", "#3B9700", "#04F757", "#C8A1A1", "#1E6E00",   
+    "#7900D7", "#A77500", "#6367A9", "#A05837", "#6B002C", "#772600", "#D790FF", "#9B9700", "#549E79",  
+    "#FFF69F", "#201625", "#72418F", "#BC23FF", "#99ADC0", "#3A2465", "#DDEFFF", "#5B4534", "#FDE8DC", 
+    "#404E55", "#CB7E98", "#A4E804", "#324E72") 
+
+# 46-color palette for standard cell type visualization
+r3dcol$cols_46 <-
+  c("#FFB500", "#00C2A0", "#D157A0", "#8CD0FF", "#FF4A46", "#FFDBE5", "#63FFAC", "#B79762", "#8FB0FF",   
+    "#997D87", "#809693", "#b4b701", "#4FC601", "#FFAA92", "#FF90C9", "#A1C299",  
+    "#F0E442", "#C2FFED", "#A079BF", "#C0B9B2", "#C2FF99", "#EEC3FF", "#B77B68", "#7A87A1",  
+    "#788D66", "#FAD09F", "#FF8A9A", "#BEC459", "#B4A8BD", "#A3C8C9", "#FF913F", "#938A81", 
+    "#00FECF", "#FF34FF", "#1CE6FF", "#04F757", "#C8A1A1", "#D790FF", "#9B9700", "#549E79",
+    "#FFF69F", "#99ADC0", "#DDEFFF", "#FDE8DC", "#CB7E98", "#A4E804")
+
+# Pijuan-Sala atlas colors
+r3dcol$cols_pjsala <- c(
+  "#005579", "#0F4A9C", "#139992", "#1A1A1A", "#354E23", "#3F84AA", "#532C8A", "#635547", "#647a4f", 
+  "#65A83E", "#7F6874", "#8870ad", "#8DB5CE", "#8EC792", "#989898", "#9e6762", "#B51D8D", "#c19f70", 
+  "#C3C388", "#C594BF", "#C72228", "#c9a997", "#C9EBFB", "#cc7818", "#CDE088", "#DABE99", "#DFCDE4", 
+  "#EF4E22", "#EF5A9D", "#F397C0", "#F6BFCB", "#f79083", "#f7f79e", "#f9decf", "#FACB12", "#FBBE92", "#ff891c")
+
+# 4x3 matrix palette (12 colors)
+r3dcol$cols_4x3 <-
+  c("#551153", "#970098", "#9c24cd", "#412c00", "#997600", "#c6a000", "#1e3604", "#355e07", "#4f890e", 
+    "#002f64", "#0050ae", "#1077f3")
+
+# 12 distinguishable colors
+r3dcol$cols_12x1 <- 
+  c('#a6cee3', '#1f78b4', '#b2df8a', '#33a02c', '#fb9a99', '#e31a1c', '#fdbf6f', '#ff7f00', '#cab2d6', 
+    '#6a3d9a', '#ffff99', '#b15928')
+                      
+# 4-color palette for conditions
+r3dcol$cols_4x1 <-
+  c("#970098", "#997600", "#4f890e", "#0050ae")
+
+# 3-color palette variant A
+r3dcol$cols_3a <-
+  c("#D157A0", "#FFB500", "#00C2A0")
+
+# 3-color palette variant B
+r3dcol$cols_3b <-
+  c("#D454B5", "#c85b00", "#008c5c")
+```
+
+```{r}
+
+```
+
+<!-- ==============================================================================
+SECTION 12: UMAP CLUSTER VISUALIZATION
+==============================================================================
+Create publication-ready UMAP plots with cluster labels
+============================================================================== -->
+
+```{r}
+# UMAP with cluster labels and legend
+DimPlot(obj, reduction = "UMAP", label = T, cols = r3dcol$cols_46, 
+        group.by = 'new_clusters', label.color = "black", pt.size = 0.5, label.size = 6.5) +
+  NoAxes() +
+  theme(legend.direction = "vertical", legend.position = "bottom") + 
+  guides(color = guide_legend(override.aes = list(size = 8), ncol = 3))
+```
+
+```{r}
+# Export cluster UMAP as PNG
+png(filename = "./fig_clusters_umap_legend.png", width = 10, height = 8, units = "in", res = 600)
+DimPlot(obj, reduction = "UMAP", label = T, cols = r3dcol$cols_46, 
+        group.by = 'new_clusters', label.color = "black", pt.size = 0.5, label.size = 6.5) +
+  NoAxes() +
+  theme(legend.direction = "vertical", legend.position = "bottom") + 
+  guides(color = guide_legend(override.aes = list(size = 8), ncol = 3))
+dev.off()
+```
+
+```{r}
+# Export cluster UMAP as PDF
+pdf("./fig_clusters_umap_legend.pdf", width = 10, height = 8)
+DimPlot(obj, reduction = "UMAP", label = T, cols = r3dcol$cols_46, 
+        group.by = 'new_clusters', label.color = "black", pt.size = 0.5, label.size = 6.5) +
+  NoAxes() +
+  theme(legend.direction = "vertical", legend.position = "bottom") + 
+  guides(color = guide_legend(override.aes = list(size = 8), ncol = 3))
+dev.off()
+```
+
+<!-- ==============================================================================
+SECTION 13: UMAP SUBCLUSTER VISUALIZATION
+============================================================================== -->
+
+```{r}
+# UMAP with subcluster labels
+DimPlot(obj, reduction = "UMAP", label = T, cols = r3dcol$cols_46, 
+        group.by = 'new_subclusters', label.color = "black", pt.size = 0.5, label.size = 6.5) +
+  NoAxes() +
+  theme(legend.direction = "vertical", legend.position = "bottom") + 
+  guides(color = guide_legend(override.aes = list(size = 9), ncol = 4))
+```
+
+```{r}
+# Export subcluster UMAP as PNG
+png(filename = "./fig_subclusters_umap_legend.png", width = 10, height = 8, units = "in", res = 600)
+DimPlot(obj, reduction = "UMAP", label = T, cols = r3dcol$cols_46, 
+        group.by = 'new_subclusters', label.color = "black", pt.size = 0.5, label.size = 6.5) +
+  NoAxes() +
+  theme(legend.direction = "vertical", legend.position = "bottom") + 
+  guides(color = guide_legend(override.aes = list(size = 9), ncol = 5))
+dev.off()
+```
+
+```{r}
+# Export subcluster UMAP as PDF
+pdf("./fig_subclusters_umap_legend.pdf", width = 10, height = 8)
+DimPlot(obj, reduction = "UMAP", label = T, cols = r3dcol$cols_46, 
+        group.by = 'new_subclusters', label.color = "black", pt.size = 0.5, label.size = 6.5) +
+  NoAxes() +
+  theme(legend.direction = "vertical", legend.position = "bottom") + 
+  guides(color = guide_legend(override.aes = list(size = 9), ncol = 5))
+dev.off()
+```
+
+```{r}
+obj
+```
+
+```{r}
+sobj <- obj
+```
+
+```{r}
+# Convert to SingleCellExperiment and back (for compatibility)
+sobj <- as.SingleCellExperiment(obj)
+```
+
+```{r}
+sobj <- as.Seurat(sobj)
+```
+
+<!-- ==============================================================================
+SECTION 14: COMPREHENSIVE MARKER DOTPLOT
+==============================================================================
+DotPlot with colored rectangles highlighting lineage-specific marker regions:
+- Green: Mesoderm markers (genes 14-20, clusters 12-17)
+- Yellow: Lateral plate/limb mesoderm (genes 21-27, clusters 18-23)
+- Red: Erythroid markers (genes 29-33, clusters 25-29)
+- Blue: Endothelial markers (genes 34-36, clusters 30-32)
+- Orange: HEP/Blood progenitor (genes 37-41, clusters 33-36)
+- Purple: Immune/Endothelial (genes 42-46, clusters 37-40)
+- Light grey: Pluripotency (genes 4-7, clusters 4-6)
+- Dark grey: Primitive streak (genes 10-12, clusters 9-10)
+============================================================================== -->
+
+```{r,fig.width=13, fig.height=10}
+# Create annotated DotPlot with lineage-specific highlighting
+fig_xxx1 <-
+  DotPlot(obj, features = c("Zfp42", "Pim2", "T", "Tacstd2", "Sfn", "Cldn3", "Anxa1", "Dnd1", 
+                            "Mesp1", "Sox17", "Fgf5", "Ttr", "Mixl1", "Hoxb2", "Fgf15", "Cacna1d",
+                            "Nrxn3", "Stard8", "Upk3b", "Plxna4", "Hoxa9", "Greb1", "Dach1", "Actc1", 
+                            "Igfbp7", "Wnt2", "Fgf12",
+                            "Ifit1", "Tal1", "Gypa", "Hba-a1", "Hba-a2", "Alas2", "Plek", "Fermt3", 
+                            "Vwf", "Icam2", "Gadd45g", "Cdh5",
+                            "Cyp26b1", "Rsad2", "Ptprc", "Nrg1", "Il17ra", "Ccl4", "Sepp1"), 
+          group.by = "new_subclusters") + 
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1, size = 15)) +  
+  # Lineage-specific highlighting rectangles
+  geom_rect(aes(xmin = 14 - 0.5, xmax = 20 + 0.5, ymin = 12 - 0.5, ymax = 17 + 0.5), 
+            fill = "transparent", color = "green", size = 0.5) +
+  geom_rect(aes(xmin = 21 - 0.5, xmax = 27 + 0.5, ymin = 18 - 0.5, ymax = 23 + 0.5), 
+            fill = "transparent", color = "yellow", size = 0.5) +  
+  geom_rect(aes(xmin = 29 - 0.5, xmax = 33 + 0.5, ymin = 25 - 0.5, ymax = 29 + 0.5), 
+            fill = "transparent", color = "red", size = 0.5) +  
+  geom_rect(aes(xmin = 34 - 0.5, xmax = 36 + 0.5, ymin = 30 - 0.5, ymax = 32 + 0.5), 
+            fill = "transparent", color = "blue", size = 0.5) +  
+  geom_rect(aes(xmin = 37 - 0.5, xmax = 41 + 0.5, ymin = 33 - 0.5, ymax = 36 + 0.5), 
+            fill = "transparent", color = "orange", size = 0.5) +  
+  geom_rect(aes(xmin = 42 - 0.5, xmax = 46 + 0.5, ymin = 37 - 0.5, ymax = 40 + 0.5), 
+            fill = "transparent", color = "purple", size = 0.5) +  
+  geom_rect(aes(xmin = 4 - 0.5, xmax = 7 + 0.5, ymin = 4 - 0.5, ymax = 6 + 0.5), 
+            fill = "transparent", color = "lightgrey", size = 0.5) +  
+  geom_rect(aes(xmin = 10 - 0.5, xmax = 12 + 0.5, ymin = 9 - 0.5, ymax = 10 + 0.5), 
+            fill = "transparent", color = "darkgrey", size = 0.5) +
+  xlab("") + ylab("") + 
+  theme(legend.position = "bottom")
+
+fig_xxx1
+```
+
+<!-- ==============================================================================
+SECTION 15: EXPORT COMPREHENSIVE DOTPLOT
+============================================================================== -->
+
+```{r}
+# Export as PNG
+png(filename = "./dot_sublusters.png", width = 13, height = 10, units = "in", res = 600)
+fig_xxx1
+dev.off()
+```
+
+```{r}
+# Export as PDF
+pdf("./dot_sublusters.pdf", width = 13, height = 10)
+fig_xxx1
+dev.off()
+```

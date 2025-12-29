@@ -1,0 +1,1638 @@
+---
+title: "Atf3 DEGs and Integration to other data"
+output: html_notebook
+---
+
+# ==============================================================================
+# SECTION 1: ENVIRONMENT SETUP
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Set Working Directory
+# ==============================================================================
+
+setwd("~/cmo_chapter_v1/Analysis/3_dge/Atf3_0/4_DEGs_Categorization/1_Integration/")
+getwd()
+```
+
+```{r}
+# ==============================================================================
+# Load Required Packages
+# ==============================================================================
+
+# suppressPackageStartupMessages(): Suppress loading messages for cleaner output
+suppressPackageStartupMessages({
+  library(dplyr)        # Data manipulation
+  library(tibble)       # Tibble data frames
+  library(ggplot2)      # Visualization
+  library(ggrepel)      # Non-overlapping text labels
+  library(ggvenn)       # Venn diagrams with ggplot2
+  library(venn)         # Venn diagram calculations
+  library(tidyverse)    # Tidyverse collection
+  library(VennDiagram)  # Venn diagram generation
+  library(cowplot)      # Plot grids and themes
+  library(UpSetR)       # UpSet plots for set intersections
+  library(stringr)      # String manipulation
+})
+```
+
+# ==============================================================================
+# SECTION 2: LOAD AND VISUALIZE DEG SUMMARY
+# ==============================================================================
+
+# Descriptive Information
+
+```{r}
+# ==============================================================================
+# Load DESeq2 Summary Statistics
+# ==============================================================================
+
+# Load pseudobulk DEG summary file from DESeq2 analysis
+# Contains: cluster identities, DEG counts at various thresholds, average Atf3 expression
+Atf3_DESeq2 <- read.csv("~/cmo_chapter_v1/Analysis/3_dge/Atf3_summary_corrected",sep = "\t",dec = ",")
+
+# Round average Atf3 expression to 2 decimal places
+Atf3_DESeq2$avg_exp_Atf3 <- round(Atf3_DESeq2$avg_exp_Atf3,2)
+
+# ==============================================================================
+# Calculate Differential Expression Metrics
+# ==============================================================================
+
+# Use padj < 0.05 threshold for DEG counts
+Atf3_DESeq2$DEG_counts <- Atf3_DESeq2$padj0_05
+
+# DiffExprScore: Net difference between up and down regulated genes
+# Positive = more upregulated, Negative = more downregulated
+Atf3_DESeq2$DiffExprScore <- Atf3_DESeq2$uppadj0_05 - Atf3_DESeq2$downpadj0_05
+
+# Normalize score to 0-1 range for color gradient
+# Min-max normalization: (x - min) / (max - min)
+Atf3_DESeq2$NormalizedScore <- (Atf3_DESeq2$DiffExprScore - min(Atf3_DESeq2$DiffExprScore)) / (max(Atf3_DESeq2$DiffExprScore) - min(Atf3_DESeq2$DiffExprScore))
+
+# ==============================================================================
+# Create Summary Visualization
+# ==============================================================================
+
+# Define divergent color scale for expression direction
+# 0 = more downregulated (orange), 0.5 = balanced (white), 1 = more upregulated (green)
+custom_scale <- scale_fill_gradient2(
+  low = 'orange', 
+  mid = 'white', 
+  high = 'green', 
+  midpoint = 0.50, 
+  name = "Expression\nChange",
+  breaks = c(0, 0.5, 1),
+  labels = c("Down > Up", "Up=Down", "Up > Down")
+)
+
+# Bubble plot: x = Atf3 expression, y = DEG counts, size = DEG counts, fill = direction
+plot_Atf3_deseq2 <- ggplot(Atf3_DESeq2, aes(x = avg_exp_Atf3, y = DEG_counts, label = ifelse(DEG_counts >=0, as.character(Idents), ''))) +
+  geom_point(aes(fill = NormalizedScore, size = DEG_counts), shape = 21, color = "black", stroke = 0.5) +
+  geom_label_repel(label.size = NA, fill = NA, size = 5) +  # Add cluster labels
+  theme_classic() +
+  ggtitle("Atf3KO vs Control; DESeq2 DGE Results padj < 0.05") +
+  theme(
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 15),
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    legend.position = "right"
+  ) +
+  custom_scale +
+  scale_size_continuous(range = c(2, 10), name = "DEG Counts") +
+  labs(x = "Average Expression", y = "DEG Counts") +
+  annotate("text", x = Inf, y = -Inf, label = "Threshold: 0", hjust = 1.1, vjust = -0.5, size = 4, color = "darkgrey")
+plot_Atf3_deseq2
+
+# Export plot
+ggsave("./plots/plot_Atf3_summary_1.pdf", width = 7, height = 5)
+ggsave("./plots/plot_Atf3_summary_1.png", width = 7, height = 5)
+```
+
+```{r}
+# ==============================================================================
+# Plot: Included Genes vs DEG Counts
+# ==============================================================================
+
+# Visualize relationship between genes included in analysis and DEGs detected
+# Point size = Atf3 expression level
+plot_included <-ggplot(Atf3_DESeq2, aes(x = included_g, y = DEG_counts, label = ifelse(DEG_counts >= 8, as.character(Idents), ''))) +
+  geom_point(aes(size = avg_exp_Atf3), shape = 21, color = "black", fill = "skyblue", stroke = 1) +
+  geom_label_repel(label.size = NA, fill = NA, size = 5, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  theme_classic() +
+  ggtitle("Atf3-KO: Included Genes and DEGs in DGE Analysis") +
+  theme(
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18, color = "darkblue"),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "right",
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10)
+  ) +
+  labs(
+    x = "Included Genes",
+    y = "DEG Counts",
+    size =  "Average\nExpression\nof Atf3"
+  ) +
+  scale_size_continuous(range = c(1, 8))
+
+plot_included
+ggsave("./plots/plot_summary_2.pdf", width = 7, height = 5)
+ggsave("./plots/plot_summary_2.png", width = 7, height = 5)
+```
+
+# ==============================================================================
+# SECTION 3: COMPILE DEG LIST FROM ALL CLUSTERS
+# ==============================================================================
+
+# DEG List
+
+## padjo05
+
+```{r}
+# ==============================================================================
+# Load All DESeq2 Results Files
+# ==============================================================================
+
+# Set directory containing DESeq2 results
+setwd("~/cmo_chapter_v1/Analysis/3_dge/DESeq2_results/Combined_Atf3/")
+
+# list.files(): Get all files matching pattern
+# Pattern: *_resOrdered_enhanced.txt (DESeq2 output format)
+files <- list.files(pattern = "_resOrdered_enhanced.txt")
+
+# Initialize empty list for data frames
+df_list <- list()
+
+# ==============================================================================
+# Loop Through Each Cluster's Results
+# ==============================================================================
+
+for (file in files) {
+  # Extract cluster name from filename
+  # sub(): Replace pattern with empty string
+  sample_name <- sub("_resOrdered_enhanced.txt", "", file)
+  
+  # Read DESeq2 results
+  df <- read.table(file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+  
+  # Filter for significant DEGs (padj < 0.05)
+  filtered_df <- df %>% filter(padj < 0.05)
+  
+  # Only process if DEGs found
+  if (nrow(filtered_df) > 0) {
+    # Add cluster name column
+    filtered_df <- filtered_df %>% mutate(Samplename = sample_name)
+    
+    # Append to list
+    df_list[[length(df_list) + 1]] <- filtered_df
+  }
+}
+
+# ==============================================================================
+# Combine All Cluster Results
+# ==============================================================================
+
+# bind_rows(): Stack all data frames vertically
+combined_df <- bind_rows(df_list)
+
+head(combined_df)
+```
+
+```{r}
+# Check dimensions of combined data
+dim(combined_df)
+```
+
+# ==============================================================================
+# SECTION 4: CONSOLIDATE GENE-LEVEL STATISTICS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Aggregate Statistics Per Gene Across All Clusters
+# ==============================================================================
+
+# For genes appearing in multiple clusters, consolidate statistics
+cleaned_df <- combined_df %>%
+  group_by(gene) %>%
+  summarize(
+    gene_id = first(gene_id),                          # Keep first Ensembl ID
+    baseMean = max(baseMean, na.rm = TRUE),            # Maximum expression
+    pvalue = min(pvalue, na.rm = TRUE),                # Minimum p-value (most significant)
+    padj = min(padj, na.rm = TRUE),                    # Minimum adjusted p-value
+    Samplename = paste(Samplename, collapse = ";"),    # Concatenate all cluster names
+    # log2FoldChange: Keep most extreme value (max if any positive, min if all negative)
+    log2FoldChange = if (all(log2FoldChange < 0)) min(log2FoldChange, na.rm = TRUE) else max(log2FoldChange, na.rm = TRUE),
+    # stat: Keep most extreme Wald statistic
+    stat = if (all(stat < 0)) min(stat, na.rm = TRUE) else max(stat, na.rm = TRUE),
+    # updown: Classify as "up", "down", or "mix" based on direction consistency
+    updown = case_when(
+      all(log2FoldChange < 0) ~ "down",    # All clusters show downregulation
+      all(log2FoldChange > 0) ~ "up",      # All clusters show upregulation
+      TRUE ~ "mix"                          # Mixed direction across clusters
+    )
+  )
+head(cleaned_df)
+```
+
+```{r}
+# Check consolidated gene count
+dim(cleaned_df)
+```
+
+```{r}
+# Store as working copy
+Atf3_degs_0 <- cleaned_df
+```
+
+```{r}
+# Count genes by direction
+# "up" = upregulated in KO, "down" = downregulated in KO, "mix" = inconsistent
+table(cleaned_df$updown)
+```
+
+# ==============================================================================
+# SECTION 5: ENCODE TF TARGET GENE INTEGRATION
+# ==============================================================================
+
+# ENCODE TARGET GENE
+
+ATF3 Human 8397 genes (<https://maayanlab.cloud/Harmonizome/dataset/ENCODE+Transcription+Factor+Targets>) Last Updated
+2015 Apr 06)
+
+conversion <https://www.syngoportal.org/convert> (version 12-12-2020) (to mouse gene names)
+
+```{r}
+# ==============================================================================
+# Load ENCODE ATF3 Target Genes
+# ==============================================================================
+
+# Human ATF3 targets from ENCODE converted to mouse orthologs via SynGO
+encode_target_symbol <- read.delim2("../0_TF_Target_encode/SynGO_id_convert_2024-06-04 14;37/target_symbols.txt",header = F)
+```
+
+```{r}
+# ==============================================================================
+# Annotate DEGs as ENCODE Targets
+# ==============================================================================
+
+# Add boolean column: TRUE if gene is an ENCODE ATF3 target
+# %in%: Set membership test
+Atf3_degs_4 <- Atf3_degs_3 %>%
+  mutate(encode_target = gene %in% encode_target_symbol$V1)
+```
+
+```{r}
+# Count DEGs that are ENCODE targets
+table(Atf3_degs_4$encode_target)
+```
+
+# ==============================================================================
+# SECTION 6: LITERATURE GENE SET INTEGRATION
+# ==============================================================================
+
+# Literature
+
+```{r}
+# ==============================================================================
+# Load Literature-Curated Gene Sets
+# ==============================================================================
+
+# Load pre-compiled gene sets from published ATF3 studies
+# Contains: wang23up, wang23down, sood17deg, sykes21up, sykes21down,
+#           sammons23up, sammons23down, nardo15up, nardo15down
+litera <- readRDS("../00_Literature/all_merge_cleaned_lit.rds")
+str(litera)
+```
+
+```{r}
+# Store working copy
+Atf3_degs_5 <- Atf3_degs_4
+```
+
+```{r}
+# ==============================================================================
+# Add Literature Gene Set Annotations
+# ==============================================================================
+
+# For each published study, add boolean columns indicating membership
+# wang23: Wang et al. 2023
+Atf3_degs_5$wang23up <- Atf3_degs_5$gene %in% litera$wang23up
+Atf3_degs_5$wang23down <- Atf3_degs_5$gene %in% litera$wang23down
+
+# sood17: Sood et al. 2017
+Atf3_degs_5$sood17deg <- Atf3_degs_5$gene %in% litera$sood17deg
+
+# sykes21: Sykes et al. 2021
+Atf3_degs_5$sykes21up <- Atf3_degs_5$gene %in% litera$sykes21up
+Atf3_degs_5$sykes21down <- Atf3_degs_5$gene %in% litera$sykes21down
+
+# sammons23: Sammons et al. 2023
+Atf3_degs_5$sammons23up <- Atf3_degs_5$gene %in% litera$sammons23up
+Atf3_degs_5$sammons23down <- Atf3_degs_5$gene %in% litera$sammons23down
+
+# nardo15: Nardo et al. 2015
+Atf3_degs_5$nardo15up <- Atf3_degs_5$gene %in% litera$nardo15up
+Atf3_degs_5$nardo15down <- Atf3_degs_5$gene %in% litera$nardo15down
+
+# Combined sets (up + down)
+Atf3_degs_5$wang23 <- Atf3_degs_5$gene %in% litera$wang23
+Atf3_degs_5$sykes21 <- Atf3_degs_5$gene %in% litera$sykes21
+Atf3_degs_5$sammons23 <- Atf3_degs_5$gene %in% litera$sammons23
+Atf3_degs_5$nardo15 <- Atf3_degs_5$gene %in% litera$nardo15
+
+# Any literature evidence
+Atf3_degs_5$liter_all <- Atf3_degs_5$gene %in% litera$all
+```
+
+```{r}
+# Count DEGs with any literature support
+table(Atf3_degs_5$liter_all)
+```
+
+```{r}
+# Store working copy
+Atf3_degs_6 <-Atf3_degs_5
+```
+
+# ==============================================================================
+# SECTION 7: CHIPSEQ DATA INTEGRATION
+# ==============================================================================
+
+# ChIPseq DATA
+
+```{r}
+# ==============================================================================
+# Load ChIP-seq Peak-to-Gene Assignments
+# ==============================================================================
+
+# GREAT: Genomic Regions Enrichment of Annotations Tool
+# Assigns regulatory peaks to nearest genes
+data <- read.delim2("../../3_Chipseqs/5_Nearest_Gene/GREAT/20240709-public-4.0.4-qbtw0X-mm10-all-gene.txt")
+head(data)
+
+# Keep only gene ID and peak distance columns
+data <- data[, 1:2]
+colnames(data) <- c("gene_id", "peaks")
+dim(data)
+head(data)
+tail(data)
+```
+
+```{r}
+# ==============================================================================
+# Clean Peak Distance Values
+# ==============================================================================
+
+# Extract numeric values from parentheses and clean format
+# str_extract_all(): Extract all matches of pattern
+# Pattern: \\(([^)]+)\\) matches content inside parentheses
+data <- data %>%
+  mutate(peaks = str_extract_all(peaks, "\\(([^)]+)\\)") %>% 
+                 sapply(paste, collapse = ",") %>% 
+                 str_replace_all("[()]", ""))
+
+head(data)
+```
+
+```{r}
+dim(data)
+```
+
+```{r}
+# ==============================================================================
+# Find Closest Peaks to TSS
+# ==============================================================================
+
+# Function to find closest peaks in each direction from TSS
+# Positive values: downstream of TSS
+# Negative values: upstream of TSS
+find_closest_values_peaks <- function(peaks) {
+  # Split comma-separated values and convert to numeric
+  values <- as.numeric(unlist(strsplit(peaks, ",")))
+  positive_values <- values[values > 0]
+  non_positive_values <- values[values <= 0]
+  
+  # Find closest positive (smallest positive) and closest negative (largest non-positive)
+  closest_positive <- if (length(positive_values) > 0) min(positive_values) else NA
+  closest_non_positive <- if (length(non_positive_values) > 0) max(non_positive_values) else NA
+  
+  return(c(closest_positive, closest_non_positive))
+}
+
+# Apply function to each row
+# rowwise(): Enable row-by-row operations
+data <- data %>%
+  rowwise() %>%
+  mutate(
+    closest_positive = find_closest_values_peaks(peaks)[1],
+    closest_non_positive = find_closest_values_peaks(peaks)[2]
+  )
+
+
+head(data)
+```
+
+```{r}
+tail(data)
+```
+
+```{r}
+# ==============================================================================
+# Count Total Peaks Per Gene
+# ==============================================================================
+
+# Function to count comma-separated values
+count_values <- function(x) {
+  lengths(strsplit(x, ","))
+}
+
+# Add column with total peak count per gene
+data <- data %>%
+  mutate(chip_all = sapply(peaks, count_values))
+
+head(data)
+```
+
+```{r}
+# Maximum peaks per gene
+max(data$chip_all)
+```
+
+```{r}
+# ==============================================================================
+# Visualize Peak Distribution Per Gene
+# ==============================================================================
+
+# Histogram of peak counts per gene
+ggplot(data, aes(x = chip_all)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+  labs(title = "Histogram of Counts of Values in Peaks Column",
+       x = "Count of Values",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+# ==============================================================================
+# Identify Genes with Most Peaks
+# ==============================================================================
+
+# Top 40 genes by peak count
+top_40 <- data %>%
+  arrange(desc(chip_all)) %>%
+  head(40)
+
+print(top_40[, -2], n=40)
+```
+
+```{r}
+# ==============================================================================
+# Calculate Peak Size Statistics
+# ==============================================================================
+
+# Load intersection file (ChIP-seq + ATAC-seq + Motif)
+size_calculate_intersect_01_intersect_motif <- read.delim2("../../3_Chipseqs/4_intersections/2_with_motifs/ChIPseq_Atac_Motif.bed", header = F, sep = '\t')
+head(size_calculate_intersect_01_intersect_motif)
+
+# Calculate peak sizes (end - start)
+size_calculate_intersect_01_intersect_motif$size <- size_calculate_intersect_01_intersect_motif$V3- size_calculate_intersect_01_intersect_motif$V2
+head(size_calculate_intersect_01_intersect_motif)
+
+# Summary statistics
+mean(size_calculate_intersect_01_intersect_motif$size)
+median(size_calculate_intersect_01_intersect_motif$size)
+min(size_calculate_intersect_01_intersect_motif$size)
+max(size_calculate_intersect_01_intersect_motif$size)
+```
+
+We can continue know. It is 500 bp fragment size.
+
+```{r}
+# ==============================================================================
+# Extract All Peak Distances for Distribution Plot
+# ==============================================================================
+
+# Combine all peak distances into single vector
+all_peaks <- data %>%
+  pull(peaks) %>%               # Extract peaks column
+  strsplit(",") %>%             # Split by comma
+  unlist() %>%                  # Flatten to vector
+  as.numeric()                  # Convert to numeric
+
+# Remove NA values
+all_peaks <- na.omit(all_peaks)
+
+# Histogram of all peak distances to TSS
+p1 <- ggplot(data.frame(peaks = all_peaks), aes(x = peaks)) +
+  geom_histogram(binwidth = 10, fill = "black", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Chip Peak Distance to TSS",
+       x = "TSS",
+       y = "Count") +
+  theme_classic()
+
+p1
+```
+
+```{r}
+ggsave("./plots/chip_peaks_all.pdf",width = 7, height = 5)
+ggsave("./plots/chip_peaks_all.png",width = 7, height = 5)
+```
+
+```{r}
+# ==============================================================================
+# Zoom: ±100kb from TSS
+# ==============================================================================
+
+p2 <- ggplot(data.frame(peaks = all_peaks), aes(x = peaks)) +
+  geom_histogram(binwidth = 10, fill = "black", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of ChipSeq Peak Distance to TSS (-100kb to +100kb)",
+       x = "TSS",
+       y = "Count") +
+  theme_classic()+
+  xlim(-100000, 100000) 
+p2
+```
+
+```{r}
+ggsave("./plots/chip_peaks_100kb.pdf",width = 7, height = 5)
+ggsave("./plots/chip_peaks_100kb.png",width = 7, height = 5)
+```
+
+```{r}
+# ==============================================================================
+# Zoom: ±10kb from TSS
+# ==============================================================================
+
+ggplot(data.frame(peaks = all_peaks), aes(x = peaks)) +
+  geom_histogram(binwidth = 1, fill = "black", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of ChipSeq Peak Distance to TSS (-10kb to +10kb)",
+       x = "TSS",
+       y = "Count") +
+  theme_classic()+
+  scale_x_continuous(limits = c(-10000, 10000), breaks = seq(-10000, 10000, by = 1000))
+```
+
+```{r}
+ggsave("./plots/chip_peaks_10kb.pdf",width = 7, height = 5)
+ggsave("./plots/chip_peaks_10kb.png",width = 7, height = 5)
+```
+
+# ==============================================================================
+# SECTION 8: PUBLICATION FIGURE - TSS DISTANCE
+# ==============================================================================
+
+# Figure
+
+```{r,fig.width=5, fig.height=3.5}
+# ==============================================================================
+# Publication-Quality TSS Distance Histogram
+# ==============================================================================
+
+# Focus on ±1kb from TSS (promoter region)
+figure_atf3_tss_0 <-
+  ggplot(data.frame(peaks = all_peaks), aes(x = peaks)) +
+  geom_histogram(binwidth = 1, fill = "#2166ac", color = "#2166ac", alpha = 1) +
+  labs( x = "TSS",
+       y = "Count") +
+  theme_classic()+  theme(
+    axis.title.x = element_text(size = 9),
+    axis.title.y = element_text(size = 9),
+    axis.text = element_text(size = 7),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  )+
+  scale_x_continuous(limits = c(-1000, 1000), breaks = seq(-1000, 1000, by = 250))+
+  geom_vline(xintercept = 0, linetype=2, color="red",linewidth=0.2, alpha=0.7)  # Mark TSS
+
+figure_atf3_tss_0
+ggsave("./plots/figure_atf3_tss_0.png", width = 5, height = 3.5, units = "in", dpi = 600)
+ggsave("./plots/figure_atf3_tss_0.svg", width = 5, height = 3.5, units = "in", dpi = 600)
+ggsave("./plots/figure_atf3_tss_0.pdf", width = 5, height = 3.5, units = "in", dpi = 600)
+```
+
+# ==============================================================================
+# SECTION 9: UNIQUE CLUSTER MARKER ANALYSIS
+# ==============================================================================
+
+# Unique clusters
+
+# Intersection Unique clusters
+
+## 0.05 (o05)
+
+```{r}
+# ==============================================================================
+# Define Gene Sets from Small Clusters
+# ==============================================================================
+
+# Extract significant genes (padj < 0.05) from each small cluster
+# These clusters had insufficient cells for DESeq2 pseudobulk, used FindMarkers instead
+Atf3_unique_o05 <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndCyp26b1     = rownames(EndCyp26b1_cmo_CvsN_3[EndCyp26b1_cmo_CvsN_3$p_val_adj< 0.05,])
+)
+
+upset_df <- Atf3_unique_o05
+
+# ==============================================================================
+# Create UpSet Plot
+# ==============================================================================
+
+# fromList(): Convert list of gene sets to binary matrix for UpSetR
+upset_data <- fromList(upset_df)
+
+
+# upset(): Create UpSet plot showing set intersections
+# More scalable alternative to Venn diagrams for >3 sets
+plot_Atf3_unique_o05 <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,            # Preserve set order as specified
+  nsets = length(upset_df),     # Include all sets
+  order.by = "degree",          # Order by intersection size
+  sets.bar.color = "blue",      # Set size bar color
+  matrix.color = "gray23",      # Matrix dot color
+  main.bar.color ="red",        # Intersection bar color
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),        # Matrix to bar ratio
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+plot_Atf3_unique_o05
+```
+
+# ==============================================================================
+# SECTION 10: INTERSECTION ANALYSIS - DIFFERENT THRESHOLDS
+# ==============================================================================
+
+## o05 baIfit1 - EndRsad2
+
+```{r}
+# ==============================================================================
+# Two-Set Intersection: baIfit1 vs EndRsad2 (padj < 0.05)
+# ==============================================================================
+
+Atf3_unique_o05_be <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.05,])
+)
+
+upset_df <- Atf3_unique_o05_be
+upset_data <- fromList(upset_df)
+
+
+# UpSet plot for two-set comparison
+plot_Atf3_unique_o05_be <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+plot_Atf3_unique_o05_be
+```
+
+
+```{r}
+# ==============================================================================
+# Two-Set Intersection: padj < 0.01 (More Stringent)
+# ==============================================================================
+
+Atf3_unique_o01_be <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.01,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.01,])
+)
+
+upset_df <- Atf3_unique_o01_be
+upset_data <- fromList(upset_df)
+
+
+plot_Atf3_unique_o01_be <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+plot_Atf3_unique_o01_be
+```
+
+```{r}
+# ==============================================================================
+# Two-Set Intersection: padj < 0.001 (Most Stringent)
+# ==============================================================================
+
+Atf3_unique_o001_be <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.001,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.001,])
+)
+
+upset_df <- Atf3_unique_o001_be
+upset_data <- fromList(upset_df)
+
+
+plot_Atf3_unique_o001_be <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+plot_Atf3_unique_o001_be
+```
+
+# ==============================================================================
+# SECTION 11: INTEGRATE SMALL CLUSTERS WITH DESeq2 DEGs
+# ==============================================================================
+
+# I will use 0.05
+
+```{r}
+# ==============================================================================
+# Four-Set Intersection: Three Small Clusters + DESeq2 DEGs
+# ==============================================================================
+
+Atf3_unique_o05_beX_deg <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndCyp26b1     = rownames(EndCyp26b1_cmo_CvsN_3[EndCyp26b1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  DEGs          = df$gene  # DESeq2 pseudobulk DEGs
+)
+
+upset_df <- Atf3_unique_o05_beX_deg
+upset_data <- fromList(upset_df)
+
+
+plot_Atf3_unique_o05_beX_deg <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+plot_Atf3_unique_o05_beX_deg
+```
+
+```{r}
+# ==============================================================================
+# Three-Set Intersection: Two Small Clusters + DESeq2 DEGs
+# ==============================================================================
+
+Atf3_unique_o05_be_deg <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.05,]),
+  DEGs          = df$gene
+)
+
+upset_df <- Atf3_unique_o05_be_deg
+upset_data <- fromList(upset_df)
+
+
+plot_Atf3_unique_o05_be_deg <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+plot_Atf3_unique_o05_be_deg
+```
+
+# ==============================================================================
+# SECTION 12: ANNOTATE DEGs WITH SMALL CLUSTER MEMBERSHIP
+# ==============================================================================
+
+### EndRsad2 - baIfit1 - DEGs
+
+```{r}
+# ==============================================================================
+# Add Boolean Columns for Each Small Cluster
+# ==============================================================================
+
+# Check if each DEG is also significant in baIfit1
+df$int_baIfit1 <- ifelse(df$gene %in% Atf3_unique_o05_be_deg$baIfit1, TRUE, FALSE)
+```
+
+```{r}
+table(df$int_baIfit1)
+```
+
+```{r}
+# Check if each DEG is also significant in EndRsad2
+df$int_EndRsad2 <- ifelse(df$gene %in% Atf3_unique_o05_be_deg$EndRsad2, TRUE, FALSE)
+table(df$int_EndRsad2)
+```
+
+```{r}
+# Check if each DEG is also significant in EndCyp26b1
+df$int_EndCyp26b1 <- ifelse(df$gene %in% Atf3_unique_o05_beX_deg$EndCyp26b1, TRUE, FALSE)
+table(df$int_EndCyp26b1)
+```
+
+# ==============================================================================
+# SECTION 13: CALCULATE SET INTERSECTIONS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Triple Intersection: All Three Sets
+# ==============================================================================
+
+# Reduce(intersect, ...): Sequentially apply intersect to list of vectors
+# Genes significant in baIfit1 AND EndRsad2 AND DESeq2
+genes51 <- Reduce(intersect, list(Atf3_unique_o05_be_deg$baIfit1,Atf3_unique_o05_be_deg$EndRsad2,Atf3_unique_o05_be_deg$DEGs))
+genes51
+```
+
+```{r}
+genes61 <-  Reduce(intersect, list(Atf3_unique_o05_be_deg$baIfit1,Atf3_unique_o05_be_deg$EndRsad2,Atf3_unique_o05_be_deg$DEGs))
+genes51
+```
+
+```{r}
+# Visualize with ggvenn
+ggvenn(Atf3_unique_o05_be_deg)
+```
+
+```{r}
+# ==============================================================================
+# Define Outersect Function (Symmetric Difference)
+# ==============================================================================
+
+# outersect(): Find elements unique to one set or the other (XOR operation)
+outersect <- function(x, y) {
+  sort(c(setdiff(x, y),    # Elements in x but not y
+         setdiff(y, x)))   # Elements in y but not x
+}
+```
+
+```{r}
+# ==============================================================================
+# Find Genes in baIfit1 ∩ EndRsad2 but NOT in DEGs
+# ==============================================================================
+
+# Genes shared by small clusters but not detected in pseudobulk
+genes_65 <- 
+  outersect(
+  intersect(Atf3_unique_o05_be_deg$baIfit1, Atf3_unique_o05_be_deg$EndRsad2), 
+  intersect(intersect(Atf3_unique_o05_be_deg$baIfit1, Atf3_unique_o05_be_deg$EndRsad2),Atf3_unique_o05_be_deg$DEGs))
+length(genes_65)
+genes_65
+```
+
+```{r}
+# ==============================================================================
+# Find Genes in baIfit1 ∩ DEGs but NOT in EndRsad2 ∩ DEGs
+# ==============================================================================
+
+genes_13 <- 
+  outersect(
+  intersect(Atf3_unique_o05_be_deg$baIfit1, Atf3_unique_o05_be_deg$DEGs), 
+  intersect(intersect(Atf3_unique_o05_be_deg$baIfit1, Atf3_unique_o05_be_deg$EndRsad2),Atf3_unique_o05_be_deg$DEGs))
+length(genes_13)
+genes_13
+```
+
+```{r}
+# ==============================================================================
+# Find Genes in EndRsad2 ∩ DEGs but NOT in baIfit1 ∩ DEGs
+# ==============================================================================
+
+genes_1 <- 
+  outersect(
+  intersect(Atf3_unique_o05_be_deg$EndRsad2, Atf3_unique_o05_be_deg$DEGs), 
+  intersect(intersect(Atf3_unique_o05_be_deg$baIfit1, Atf3_unique_o05_be_deg$EndRsad2),Atf3_unique_o05_be_deg$DEGs))
+length(genes_1)
+genes_1
+```
+
+```{r}
+# ==============================================================================
+# Triple Intersection: All Three Sets
+# ==============================================================================
+
+genes_51 <- 
+  intersect(intersect(Atf3_unique_o05_be_deg$baIfit1, Atf3_unique_o05_be_deg$EndRsad2),Atf3_unique_o05_be_deg$DEGs)
+length(genes_51)
+genes_51
+```
+
+```{r}
+# ==============================================================================
+# Add Intersection Categories to Main Data Frame
+# ==============================================================================
+
+# Boolean columns for each intersection category
+df$unq_bed_genes51 <- ifelse(df$gene %in% genes_51, TRUE, FALSE)  # All three sets
+df$unq_bd_genes13 <- ifelse(df$gene %in% genes_13, TRUE, FALSE)   # baIfit1 + DEGs only
+df$unq_ed_genes1 <- ifelse(df$gene %in% genes_1, TRUE, FALSE)     # EndRsad2 + DEGs only
+```
+
+# ==============================================================================
+# SECTION 14: EXPORT ANNOTATED DEG TABLE
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Save Final Annotated DEG Table
+# ==============================================================================
+
+# Save as RDS (preserves R object structure)
+saveRDS(df, "./data_output/Atf3_degs_15.rds")
+
+# Save as tab-separated text
+write.table(df, "./data_output/Atf3_degs_15.txt",sep = '\t', row.names = F, col.names = T)
+```
+
+```{r}
+# ==============================================================================
+# Final UpSet Plot: Three-Set Comparison
+# ==============================================================================
+
+Atf3_unique_o05_be_deg <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.05,]),
+  DEGs          = df$gene
+)
+
+upset_df <- Atf3_unique_o05_be_deg
+upset_data <- fromList(upset_df)
+
+
+plot_Atf3_unique_o05_be_deg <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3,
+    
+)
+plot_Atf3_unique_o05_be_deg
+```
+
+```{r}
+# Export UpSet plot
+pdf("./plots/upsetr_bed.pdf",width = 6.5, height = 4.5)
+plot_Atf3_unique_o05_be_deg
+dev.off()
+
+png(filename = "./plots/upsetr_bed.png",width = 6.5, height = 4.5,units = "in",res = 300)
+plot_Atf3_unique_o05_be_deg
+dev.off()
+```
+
+```{r}
+# ==============================================================================
+# Three Small Clusters UpSet Plot
+# ==============================================================================
+
+Atf3_unique_o05 <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndCyp26b1     = rownames(EndCyp26b1_cmo_CvsN_3[EndCyp26b1_cmo_CvsN_3$p_val_adj< 0.05,])
+)
+
+upset_df <- Atf3_unique_o05
+upset_data <- fromList(upset_df)
+
+
+plot_Atf3_unique_o05 <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+
+plot_Atf3_unique_o05
+```
+
+```{r}
+pdf("./plots/upsetr_bee.pdf",width = 6.5, height = 4.5)
+plot_Atf3_unique_o05
+dev.off()
+
+png(filename = "./plots/upsetr_bee.png",width = 6.5, height = 4.5,units = "in",res = 300)
+plot_Atf3_unique_o05
+dev.off()
+```
+
+```{r}
+# ==============================================================================
+# Four-Set UpSet: All Small Clusters + DEGs
+# ==============================================================================
+
+Atf3_unique_o05_beX_deg <- list(
+  baIfit1        = rownames(baIfit1_cmo_CvsN_3[baIfit1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndRsad2       = rownames(EndRsad2_cmo_CvsN_3[EndRsad2_cmo_CvsN_3$p_val_adj< 0.05,]),
+  EndCyp26b1     = rownames(EndCyp26b1_cmo_CvsN_3[EndCyp26b1_cmo_CvsN_3$p_val_adj< 0.05,]),
+  DEGs          = df$gene
+)
+
+upset_df <- Atf3_unique_o05_beX_deg
+upset_data <- fromList(upset_df)
+
+
+plot_Atf3_unique_o05_beX_deg <-
+  upset(
+  upset_data, 
+  keep.order = TRUE,
+  nsets = length(upset_df),
+  order.by = "degree",
+  sets.bar.color = "blue",
+  matrix.color = "gray23",
+  main.bar.color ="red",
+  att.color = c("red","green"),
+  text.scale = 1.5,
+  set_size.show = F,
+  mb.ratio = c(0.7,0.3),
+  matrix.dot.alpha = 0.1, line.size = 0.4, point.size = 3
+    
+)
+plot_Atf3_unique_o05_beX_deg
+```
+
+```{r}
+pdf("./plots/upsetr_beed.pdf",width = 6.5, height = 4.5)
+plot_Atf3_unique_o05_beX_deg
+dev.off()
+
+png(filename = "./plots/upsetr_beed.png",width = 6.5, height = 4.5,units = "in",res = 300)
+plot_Atf3_unique_o05_beX_deg
+dev.off()
+```
+
+# ==============================================================================
+# SECTION 15: VOLCANO PLOT PREPARATION
+# ==============================================================================
+
+# Volcano Plots
+
+```{r}
+# ==============================================================================
+# Prepare Data Frames for Volcano Plots
+# ==============================================================================
+
+# Add gene names as column (currently in rownames)
+EndRsad2_cmo_CvsN_3_df <- EndRsad2_cmo_CvsN_3
+EndRsad2_cmo_CvsN_3_df$gene <- rownames(EndRsad2_cmo_CvsN_3)
+
+EndCyp26b1_cmo_CvsN_3_df <- EndCyp26b1_cmo_CvsN_3
+EndCyp26b1_cmo_CvsN_3_df$gene <- rownames(EndCyp26b1_cmo_CvsN_3)
+
+baIfit1_cmo_CvsN_3_df <- baIfit1_cmo_CvsN_3
+baIfit1_cmo_CvsN_3_df$gene <- rownames(baIfit1_cmo_CvsN_3)
+```
+
+# ==============================================================================
+# SECTION 16: VOLCANO PLOT - baIfit1
+# ==============================================================================
+
+# baIfit1
+
+```{r}
+# ==============================================================================
+# Volcano Plot: baIfit1 vs Late Mesoderm
+# ==============================================================================
+
+de <- baIfit1_cmo_CvsN_3_df
+
+# Initialize differential expression category
+de$diffexpressed <- "NO"
+
+# Classify genes by direction and significance
+de$diffexpressed[de$avg_log2FC > 0 & de$p_val_adj < 0.05] <- "UP"
+de$diffexpressed[de$avg_log2FC < -0 & de$p_val_adj < 0.05] <- "DOWN"
+
+# Add labels for significant genes only
+de$delabel <- NA
+de$delabel[de$diffexpressed != "NO"] <- de$gene[de$diffexpressed != "NO"]
+
+# Remove Atf3 and Fam71a (confounders) for clean version
+de_clean <- de %>% filter(!(gene %in% c("Atf3", "Fam71a")))
+
+# Count significant genes
+up_count <- sum(de$diffexpressed == "UP")
+down_count <- sum(de$diffexpressed == "DOWN")
+
+
+# Create volcano plot
+plot_volcano_baIfit1 <- ggplot(data=de, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3.5, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=3.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#b2182b", "black", "#2166ac")) +  # DOWN=red, NO=black, UP=blue
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("baIfit1 vs Hoxa+ and Hoxb+ Mesoderm") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+    axis.text = element_text(size = 8),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(p_val_adj)"
+  )+
+  annotate("text",x = min(de$avg_log2FC), y = max(-log10(na.omit(de$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.1, vjust =-0.5, size = 3, color = "#525252", fontface = "italic") +
+  annotate("text",x = max(de$avg_log2FC),y = max(-log10(na.omit(de$p_val_adj))), label = paste("UP:", up_count), hjust = 1.1, vjust = -0.5, size = 3, color = "#525252", fontface = "italic")
+
+print(plot_volcano_baIfit1)
+
+# ----------------------------------------------------------------------------------------------------
+# Clean version (without Atf3 and Fam71a)
+plot_volcano_baIfit1_clean <- ggplot(data=de_clean, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3.5, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=3.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#b2182b", "black", "#2166ac")) +
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("baIfit1 vs Hoxa+ and Hoxb+ Mesoderm") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+    axis.text = element_text(size = 8),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(p_val_adj)"
+  )+
+  annotate("text",x = min(de_clean$avg_log2FC),y = max(-log10(na.omit(de_clean$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.1, vjust =-0.5, size = 3, color = "#525252", fontface = "italic") +
+  annotate("text",x = max(de_clean$avg_log2FC), y = max(-log10(na.omit(de_clean$p_val_adj))), label = paste("UP:", up_count), hjust = 1.1, vjust = -0.5, size = 3, color = "#525252", fontface = "italic")
+
+print(plot_volcano_baIfit1_clean)
+```
+
+```{r}
+# ==============================================================================
+# Alternative Color Scheme Volcano Plot
+# ==============================================================================
+
+plot_volcano_baIfit1x <- ggplot(data=de, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=5.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#B51D8D", "black", "#c85b00")) +  # Alternative color scheme
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("baIfit1 vs Late Mesoderm") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 15, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2),
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(padj)"
+  )+
+  annotate("text",x = min(de$avg_log2FC), y = max(-log10(na.omit(de$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.05, vjust =-0, size = 5.5, color = "red", fontface = "italic") +
+  annotate("text",x = max(de$avg_log2FC),y = max(-log10(na.omit(de$p_val_adj))), label = paste("UP:", up_count), hjust = 5, vjust = -0, size = 5.5, color = "blue", fontface = "italic")
+
+print(plot_volcano_baIfit1x)
+```
+
+# ==============================================================================
+# SECTION 17: VOLCANO PLOT - EndRsad2
+# ==============================================================================
+
+## EndRsad2
+
+```{r}
+# ==============================================================================
+# Volcano Plot: EndRsad2 vs Other Endothelial Clusters
+# ==============================================================================
+
+de <- EndRsad2_cmo_CvsN_3_df
+
+# Classify differential expression
+de$diffexpressed <- "NO"
+de$diffexpressed[de$avg_log2FC > 0 & de$p_val_adj < 0.05] <- "UP"
+de$diffexpressed[de$avg_log2FC < -0 & de$p_val_adj < 0.05] <- "DOWN"
+
+# Add gene labels
+de$delabel <- NA
+de$delabel[de$diffexpressed != "NO"] <- de$gene[de$diffexpressed != "NO"]
+
+# Remove confounders
+de_clean <- de %>% filter(!(gene %in% c("Atf3", "Fam71a")))
+
+# Count significant genes
+up_count <- sum(de$diffexpressed == "UP")
+down_count <- sum(de$diffexpressed == "DOWN")
+
+
+# Create volcano plot
+plot_volcano_EndRsad2 <- ggplot(data=de, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3.5, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=3.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#b2182b", "black", "#2166ac")) +
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("EndRsad2 vs EndGadd45g, EndCdh5, EndCyp26b1") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+    axis.text = element_text(size = 8),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(p_val_adj)"
+  )+
+  annotate("text",x = min(de$avg_log2FC), y = max(-log10(na.omit(de$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.1, vjust =-0.5, size = 3, color = "#525252", fontface = "italic") +
+  annotate("text",x = max(de$avg_log2FC),y = max(-log10(na.omit(de$p_val_adj))), label = paste("UP:", up_count), hjust = 1.1, vjust = -0.5, size = 3, color = "#525252", fontface = "italic")
+
+print(plot_volcano_EndRsad2)
+
+# ----------------------------------------------------------------------------------------------------
+# Clean version
+plot_volcano_EndRsad2_clean <- ggplot(data=de_clean, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3.5, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=3.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#b2182b", "black", "#2166ac")) +
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("EndRsad2 vs EndGadd45g, EndCdh5, EndCyp26b1") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+    axis.text = element_text(size = 8),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(p_val_adj)"
+  )+
+  annotate("text",x = min(de_clean$avg_log2FC),y = max(-log10(na.omit(de_clean$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.1, vjust =-0.5, size = 3, color = "#525252", fontface = "italic") +
+  annotate("text",x = max(de_clean$avg_log2FC), y = max(-log10(na.omit(de_clean$p_val_adj))), label = paste("UP:", up_count), hjust = 1.1, vjust = -0.5, size = 3, color = "#525252", fontface = "italic")
+
+print(plot_volcano_EndRsad2_clean)
+```
+
+```{r}
+# Alternative color scheme
+plot_volcano_EndRsad2x <- ggplot(data=de, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=5.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#551153", "black", "#c85b00")) +
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("EndRsad2 vs Rest of the Endothelium") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 15, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(padj)"
+  )+
+  annotate("text",x = min(de$avg_log2FC), y = max(-log10(na.omit(de$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.05, vjust =-0, size = 5.5, color = "red", fontface = "italic") +
+  annotate("text",x = max(de$avg_log2FC),y = max(-log10(na.omit(de$p_val_adj))), label = paste("UP:", up_count), hjust = 2.5, vjust = -0, size = 5.5, color = "blue",  fontface = "italic")
+
+print(plot_volcano_EndRsad2x)
+```
+
+# ==============================================================================
+# SECTION 18: VOLCANO PLOT - EndCyp26b1
+# ==============================================================================
+
+## EndCyp26b1
+
+```{r}
+# ==============================================================================
+# Volcano Plot: EndCyp26b1 vs Other Endothelial Clusters
+# ==============================================================================
+
+de <- EndCyp26b1_cmo_CvsN_3_df
+
+# Classify differential expression
+de$diffexpressed <- "NO"
+de$diffexpressed[de$avg_log2FC > 0 & de$p_val_adj < 0.05] <- "UP"
+de$diffexpressed[de$avg_log2FC < -0 & de$p_val_adj < 0.05] <- "DOWN"
+
+# Add gene labels
+de$delabel <- NA
+de$delabel[de$diffexpressed != "NO"] <- de$gene[de$diffexpressed != "NO"]
+
+# Remove confounders
+de_clean <- de %>% filter(!(gene %in% c("Atf3", "Fam71a")))
+
+# Count significant genes
+up_count <- sum(de$diffexpressed == "UP")
+down_count <- sum(de$diffexpressed == "DOWN")
+
+
+# Create volcano plot
+plot_volcano_EndCyp26b1 <- ggplot(data=de, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3.5, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=3.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#b2182b", "black", "#2166ac")) +
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("EndCyp26b1 vs EndGadd45g, EndCdh5, EndRsad2") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+    axis.text = element_text(size = 8),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(p_val_adj)"
+  )+
+  annotate("text",x = min(de$avg_log2FC), y = max(-log10(na.omit(de$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.1, vjust =-0.5, size = 3, color = "#525252", fontface = "italic") +
+  annotate("text",x = max(de$avg_log2FC),y = max(-log10(na.omit(de$p_val_adj))), label = paste("UP:", up_count), hjust = 1.1, vjust = -0.5, size = 3, color = "#525252", fontface = "italic")
+
+print(plot_volcano_EndCyp26b1)
+
+# ----------------------------------------------------------------------------------------------------
+# Clean version
+plot_volcano_EndCyp26b1_clean <- ggplot(data=de_clean, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3.5, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=3.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#b2182b", "black", "#2166ac")) +
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("EndCyp26b1 vs EndGadd45g, EndCdh5, EndRsad2") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10),
+    axis.text = element_text(size = 8),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(p_val_adj)"
+  )+
+  annotate("text",x = min(de_clean$avg_log2FC),y = max(-log10(na.omit(de_clean$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.1, vjust =-0.5, size = 3, color = "#525252", fontface = "italic") +
+  annotate("text",x = max(de_clean$avg_log2FC), y = max(-log10(na.omit(de_clean$p_val_adj))), label = paste("UP:", up_count), hjust = 1.1, vjust = -0.5, size = 3, color = "#525252", fontface = "italic")
+
+print(plot_volcano_EndCyp26b1_clean)
+
+```
+
+```{r}
+# Alternative color scheme
+plot_volcano_EndCyp26b1x <- ggplot(data=de, aes(x=avg_log2FC, y=-log10(p_val_adj), color=diffexpressed, label=delabel)) +
+  geom_point(size=3, alpha=0.7, aes(shape=diffexpressed)) +
+  theme_classic(base_size = 15) +
+  geom_text_repel(size=5.5, max.overlaps = 20, box.padding = 0.35, point.padding = 0.3, segment.color = 'grey50') +
+  scale_color_manual(values=c("#551153", "black", "#c85b00")) +
+  scale_shape_manual(values=c(16, 17, 15)) +
+  ggtitle("EndCyp26b1 vs Rest of the Endothelium") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 15, color = "black",face = "bold"),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    legend.position = "none", 
+    axis.line = element_line(size = 0.2)
+  ) +
+  labs(
+    x = "Average Log2 Fold Change",
+    y = "-log10(padj)"
+  )+
+  annotate("text",x = min(de$avg_log2FC), y = max(-log10(na.omit(de$p_val_adj))), label = paste("DOWN:", down_count), hjust = 0.05, vjust =-0, size = 5.5, color = "red", fontface = "italic") +
+  annotate("text",x = max(de$avg_log2FC),y = max(-log10(na.omit(de$p_val_adj))), label = paste("UP:", up_count), hjust = 3.75, vjust = -0, size = 5.5, color = "blue",  fontface = "italic")
+
+print(plot_volcano_EndCyp26b1x)
+```
+
+# ==============================================================================
+# SECTION 19: COMBINED VOLCANO PLOT FIGURE
+# ==============================================================================
+
+```{r,fig.width=20, fig.height=5}
+# ==============================================================================
+# Combine All Three Volcano Plots
+# ==============================================================================
+
+# plot_grid(): Combine plots horizontally
+pl_volcano_0 <- plot_grid(plot_volcano_baIfit1,plot_volcano_EndRsad2,plot_volcano_EndCyp26b1, ncol=3)
+pl_volcano_0
+```
+
+```{r}
+# Export combined plot
+pdf("./plots/volcano_0.pdf",width = 20, height = 5)
+pl_volcano_0
+dev.off()
+
+png(filename = "./plots/colcano_0.png",width = 20, height = 5,units = "in",res = 300)
+pl_volcano_0
+dev.off()
+```
+
+```{r}
+# High-resolution version
+png(filename = "./plots/colcano_0_600.png",width = 20, height = 5,units = "in",res = 600)
+pl_volcano_0
+dev.off()
+```
+
+# ==============================================================================
+# SECTION 20: SAVE MARKER DATA
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Export Marker Results for Each Cluster
+# ==============================================================================
+
+# EndRsad2
+saveRDS(EndRsad2_cmo_CvsN_3_df, "./data_output/EndRsad2_cmo_CvsN_3_df.rds")
+write.table(EndRsad2_cmo_CvsN_3_df, "./data_output/EndRsad2_cmo_CvsN_3_df.txt", sep = '\t',row.names = F)
+
+# EndCyp26b1
+saveRDS(EndCyp26b1_cmo_CvsN_3_df, "./data_output/EndCyp26b1_cmo_CvsN_3_df.rds")
+write.table(EndCyp26b1_cmo_CvsN_3_df, "./data_output/EndCyp26b1_cmo_CvsN_3_df.txt", sep = '\t',row.names = F)
+
+# baIfit1
+saveRDS(baIfit1_cmo_CvsN_3_df, "./data_output/baIfit1_cmo_CvsN_3_df.rds")
+write.table(baIfit1_cmo_CvsN_3_df, "./data_output/baIfit1_cmo_CvsN_3_df.txt", sep = '\t',row.names = F)
+```
+
+```{r}
+# ==============================================================================
+# Clean Up Large Objects
+# ==============================================================================
+
+rm(s_cmo)
+rm(s_cmo_baIfit1)
+rm(s_koatf3)
+rm(s_ntatf3)
+rm(s_ntatf3_baIfit1)
+```
+
+```{r}
+# ==============================================================================
+# Export Intersection Gene Lists
+# ==============================================================================
+
+write.table(genes_65,"./data_output/genes_65.txt",row.names = F,col.names = F, quote = F)  # baIfit1 ∩ EndRsad2 only
+write.table(genes_1,"./data_output/genes_1.txt",row.names = F,col.names = F, quote = F)    # EndRsad2 ∩ DEGs only
+write.table(genes_13,"./data_output/genes_13.txt",row.names = F,col.names = F, quote = F)  # baIfit1 ∩ DEGs only
+write.table(genes_51,"./data_output/genes_51.txt",row.names = F,col.names = F, quote = F)  # Triple intersection
+```
+
+```{r}
+# ==============================================================================
+# Save Complete Workspace
+# ==============================================================================
+
+save.image("./data_output/rdata.rdata")
+```
+
+# ==============================================================================
+# SECTION 21: SESSION INFORMATION
+# ==============================================================================
+
+```{r}
+sessionInfo()
+```
+
+# ==============================================================================
+# SECTION 22: ALTERNATIVE VOLCANO PLOT LAYOUT
+# ==============================================================================
+
+# asdasd
+
+```{r,fig.width=10, fig.height=20}
+# ==============================================================================
+# Vertical Volcano Plot Arrangement
+# ==============================================================================
+
+pl_volcano_0x <- plot_grid(plot_volcano_baIfit1x,plot_volcano_EndRsad2x,plot_volcano_EndCyp26b1x, ncol=1)
+
+```
+
+```{r}
+pl_volcano_0x
+```
+
+```{r}
+# Export vertical layout
+ggsave("./plots/volcano_x.png",width = 10, height = 20, units = "in",dpi = 600)
+ggsave("./plots/volcano_x.svg",width = 10, height = 20, units = "in",dpi = 600)
+ggsave("./plots/volcano_x.pdf",width = 10, height = 20, units = "in",dpi = 600)
+
+# Save plot objects
+saveRDS(pl_volcano_0x, "./data_output/pl_volcano_0x.rds")
+saveRDS(plot_volcano_baIfit1x, "./data_output/plot_volcano_baIfit1x.rds")
+saveRDS(plot_volcano_EndRsad2x, "./data_output/plot_volcano_EndRsad2x.rds")
+saveRDS(plot_volcano_EndCyp26b1x, "./data_output/plot_volcano_EndCyp26b1x.rds")
+
+
+```
+
+```{r}
+sessionInfo()
+```
+
+# ==============================================================================
+# SECTION 23: ADDITIONAL FIGURE DISPLAY
+# ==============================================================================
+
+# Figure more
+
+```{r}
+# Display additional UpSet plots
+plot_Atf3_unique_o05
+
+
+plot_Atf3_unique_o05_be_deg
+```
+
+
+
+
