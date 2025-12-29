@@ -7,8 +7,9 @@ Bioinformatics analysis code and supporting resources for:
 
 ## Key links
 
-- **Published article (Development):** https://journals.biologists.com/dev/article/152/23/dev204792/370054/Distinct-roles-of-Atf3-Zfp711-and-Bcl6b-in-early  
-  DOI: https://doi.org/10.1242/dev.204792
+- **Published article (Development):**
+  - https://journals.biologists.com/dev/article/152/23/dev204792/370054/Distinct-roles-of-Atf3-Zfp711-and-Bcl6b-in-early
+  - DOI: https://doi.org/10.1242/dev.204792
 
 - **Preprint (bioRxiv):** https://www.biorxiv.org/content/10.1101/2025.02.23.639715v1  
   DOI: https://doi.org/10.1101/2025.02.23.639715
@@ -76,9 +77,3 @@ Distinct roles of Atf3, Zfp711 and Bcl6b in early embryonic hematopoietic and en
 
 Cetin R, Picco G, van Staalduinen J, Bindels E, Hoogenboezem R, van Beek G, Sanders MA, Fidan Y, Korkmaz A, Gribnau J, van Haren J, Huylebroeck D, Mulugeta E, Grosveld F.
 Single-Cell Roadmap of Early Hemato-Endothelial Development: Functions of Atf3, Zfp711 and Bcl6b. bioRxiv (2025). https://doi.org/10.1101/2025.02.23.639715
-
-```{pgsql}
-Publication metadata (journal/volume/article ID/DOIs) verified against the journal page and PubMed record. :contentReference[oaicite:0]{index=0}  
-Preprint metadata (title/authors/DOI) verified via DOI-indexed record and the project website. :contentReference[oaicite:1]{index=1}  
-Data accession link verified via the BioStudies/ArrayExpress landing page. :contentReference[oaicite:2]{index=2}
-::contentReference[oaicite:3]{index=3}
