@@ -1,0 +1,1382 @@
+---
+title: "Demultiplexing"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Glossary
+
+**Lane**: Output of single-cell RNA-seq as a unit. In the context of
+scRNA-seq, we use chips, each with 8 lanes. These chips can be loaded
+with 8 lanes each time. To simplify, I refer to whatever we obtain from
+each lane as a 'Lane'.
+
+**Library**: Essentially the same as a 'Lane'. The cells were
+captured using 10X Chips, and the resulting material was prepared for
+NGS (Next-Generation Sequencing). The cells were transformed, and an NGS
+library was created for sequencing.
+
+**NT**: In this case, Non-Targeting Control. Similar to Wild Type
+(WT). Keeping all the experimental conditions the same, we treat these
+samples the same way as the Knockouts (KOs).
+
+**Negative**: Based on the result of the demultiplexing, the cells
+weren't labeled with a multiplexing reagent.
+
+**Doublets**: Droplets containing more than one cell from different
+samples (this is not the doublets that occur within the same sample).
+
+**Singlets**: Based on the results of the demultiplexing, droplets
+contain only one sample barcode.
+
+**Unassigned**: Cells which cannot be assigned with multiplexing.
+
+**CMO**: Cell Multiplexing Oligos used in the demultiplexing method
+for this experiment (CMO301 - CMO312).
+
+**CellRanger**: The 10X Genomics pipeline that processes the NGS
+data and provides the transcriptome/gene expression matrix and other
+files. In this case, it also includes demultiplexing data.
+
+**HTODemux**: Seurat's demultiplexing function/package.
+
+**Droplet**: Single-cell beads plus captured cells in a droplet. It
+can be one cell and bead or multiple cells in a bead.
+
+# Introduction
+
+In this notebook, I will summarize the codes, packages, and parameters
+used for the pre-processing and quality control (QC) steps of the CMO
+project. The CMO project involves multiplexed Atf3-KO, Bcl6b-KO,
+Zfp711-KO, and NT samples, resulting in 5 libraries of scRNA-seq
+datasets. I will outline the steps taken to prepare the data for
+downstream analysis.
+
+**Note:** I am not including the original exploratory code here to
+maintain clarity and focus on reproducibility.
+
+# ==============================================================================
+# SECTION 1: ENVIRONMENT SETUP AND PACKAGE LOADING
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Load Required Packages
+# ==============================================================================
+
+# Suppress package loading messages for cleaner output
+suppressMessages({
+  
+  # dplyr: Data manipulation and transformation (filter, mutate, group_by, etc.)
+  library(dplyr)
+  
+  # Seurat: Primary package for single-cell RNA-seq analysis
+  # Provides functions for QC, normalization, clustering, and visualization
+  library(Seurat)
+  
+  # ggplot2: Grammar of graphics for creating publication-quality plots
+  library(ggplot2)
+  
+  # cowplot: Extension of ggplot2 for combining multiple plots
+  library(cowplot)
+  
+  # ggvenn: Create Venn diagrams using ggplot2 syntax
+  library(ggvenn)
+  
+  # data.table: Fast data reading and manipulation (fread function)
+  library(data.table)
+  
+  # gprofiler2: Gene list functional enrichment and ortholog conversion
+  library(gprofiler2)
+})
+
+# ==============================================================================
+# Set Working Directory
+# ==============================================================================
+
+# Set the working directory to the location of your data files
+# Replace "your/working/directory" with the actual path
+setwd("your/working/directory")
+
+# Verify the working directory was set correctly
+getwd()
+```
+
+# Data Preprocessing
+
+We have 5 single-cell libraries containing 12 samples (Atf3KO x3,
+Bcl6b-KO x3, Zfp711-KO x3, NT-Control x3). To reach enough cell numbers,
+we created 5 libraries. Due to multiplexing of the single-cell data, we
+also have multiplexing data (CMO) alongside the transcriptomic data. The
+goals of demultiplexing are:
+
+1.  **Demultiplexing the samples**: Identifying the origin of each
+    single cell.
+
+2.  **Separation of cross-sample multiplets**: Detecting droplets
+    containing cells from different samples.
+
+3.  **Indirect assessment of cell types with higher multiplet rates**.
+
+4.  **Observing unlabelled or low-labelling cell types**.
+
+## Loading Data
+
+We will start by loading the CellRanger outputs. Note that 'Library' and
+'Lane' will be used interchangeably.
+
+CellRanger provides separate sample files after demultiplexing data, but
+we will use the unseparated files here to retain all available
+information.
+
+# ==============================================================================
+# SECTION 2: DATA LOADING - TRANSCRIPTOME DATA
+# ==============================================================================
+
+### Transcriptome Data
+
+```{r eval=FALSE}
+# ==============================================================================
+# Load 10X Genomics Data for Lane 1 (Example)
+# ==============================================================================
+# This process should be repeated for all 5 lanes
+
+# Define the path to the raw feature barcode matrix directory
+# This directory contains: barcodes.tsv.gz, features.tsv.gz, matrix.mtx.gz
+data_dir_l1 <- "path/to/Lane_1/raw_feature_bc_matrix/"
+
+# Read10X: Reads the 10X Genomics output files
+# Returns a list with 'Gene Expression' and 'Multiplexing Capture' matrices
+# - 'Gene Expression': Contains the transcriptome data (genes x cells)
+# - 'Multiplexing Capture': Contains the CMO barcode counts (CMOs x cells)
+data_l1 <- Read10X(data.dir = data_dir_l1)
+
+# CreateSeuratObject: Initialize a Seurat object with gene expression counts
+# - counts: The raw count matrix (genes as rows, cells as columns)
+# - Uses the 'Gene Expression' slot from the Read10X output
+seurat_Lane1 <- CreateSeuratObject(counts = data_l1$`Gene Expression`)
+
+# Add the CMO (Cell Multiplexing Oligos) data as a separate assay
+# CreateAssayObject: Creates a new assay from a count matrix
+# This stores the multiplexing capture data alongside the RNA data
+seurat_Lane1[["CMO"]] <- CreateAssayObject(counts = data_l1$`Multiplexing Capture`)
+
+# ==============================================================================
+# REPEAT FOR LANES 2-5
+# ==============================================================================
+# The same process should be applied to Lane 2, Lane 3, Lane 4, and Lane 5
+# Each lane will have its own Seurat object: seurat_Lane2, seurat_Lane3, etc.
+```
+
+**Explanation:**
+
+-   **Read10X** reads the output files from CellRanger.
+
+-   **CreateSeuratObject** initializes a Seurat object with the gene
+    expression data.
+
+-   The **'CMO'** assay is added to the Seurat object to store
+    multiplexing capture data.
+
+# ==============================================================================
+# SECTION 3: INITIAL CELL COUNT SUMMARY
+# ==============================================================================
+
+### Display the Number of Cells Loaded from Each Lane
+
+```{r,eval=FALSE}
+# ==============================================================================
+# Create Summary Table of Initial Cell Counts
+# ==============================================================================
+
+# Create a data frame to summarize cell counts across all lanes
+# ncol() returns the number of columns (cells) in each Seurat object
+cell_counts <- data.frame(
+  Sample = c("Lane 1", "Lane 2", "Lane 3", "Lane 4", "Lane 5"),
+  Cells = c(ncol(seurat_Lane1), 
+            ncol(seurat_Lane2), 
+            ncol(seurat_Lane3), 
+            ncol(seurat_Lane4), 
+            ncol(seurat_Lane5))
+)
+
+# Display the cell count table
+print(cell_counts)
+```
+
+| Sample Name  | Amount of Cells |
+|--------------|-----------------|
+| seurat_Lane1 | 3065453         |
+| seurat_Lane2 | 3029894         |
+| seurat_Lane3 | 3216261         |
+| seurat_Lane4 | 3305265         |
+| seurat_Lane5 | 3010848         |
+
+: **Explanation:**
+
+-   Initially, we have over 3 million cells per lane. However, these
+    include empty droplets and low-quality cells.
+
+# ==============================================================================
+# SECTION 4: LOAD CELLRANGER DEMULTIPLEXING RESULTS
+# ==============================================================================
+
+### CellRanger Demultiplexing Results
+
+We will load the **Confidence Assignment Table** from CellRanger, which
+contains demultiplexing information based on the CellRanger software.
+
+```{r  eval=FALSE}
+# ==============================================================================
+# Load CellRanger Assignment Confidence Tables
+# ==============================================================================
+
+# Initialize an empty list to store confidence tables from all lanes
+# Using a list allows easy access to each lane's data
+confidence_tb_cellranger <- list()
+
+# fread: Fast file reading function from data.table package
+# Much faster than read.csv for large files
+# The assignment_confidence_table.csv contains:
+# - Barcode: Cell barcode
+# - Assignment: Sample assignment (CMO ID or 'Multiplet'/'Blanks')
+# - Assignment Probability: Confidence score for the assignment
+
+# Load demultiplexing results for Lane 1
+confidence_tb_cellranger$CellRanger_L1 <- fread(
+  "path/to/Lane_1/outs/multi/multiplexing_analysis/assignment_confidence_table.csv"
+)
+
+# Load demultiplexing results for Lane 2
+confidence_tb_cellranger$CellRanger_L2 <- fread(
+  "path/to/Lane_2/outs/multi/multiplexing_analysis/assignment_confidence_table.csv"
+)
+
+# Load demultiplexing results for Lane 3
+confidence_tb_cellranger$CellRanger_L3 <- fread(
+  "path/to/Lane_3/outs/multi/multiplexing_analysis/assignment_confidence_table.csv"
+)
+
+# Load demultiplexing results for Lane 4
+confidence_tb_cellranger$CellRanger_L4 <- fread(
+  "path/to/Lane_4/outs/multi/multiplexing_analysis/assignment_confidence_table.csv"
+)
+
+# Load demultiplexing results for Lane 5
+confidence_tb_cellranger$CellRanger_L5 <- fread(
+  "path/to/Lane_5/outs/multi/multiplexing_analysis/assignment_confidence_table.csv"
+)
+```
+
+**Explanation:**
+
+-   **fread** is used to read CSV files efficiently.
+
+-   The **assignment_confidence_table.csv** contains the cell barcodes
+    and their assignment confidence from CellRanger's demultiplexing.
+
+## Cleaning Data
+
+We will start cleaning the data in multiple steps.
+
+# ==============================================================================
+# SECTION 5: FILTER EMPTY DROPLETS
+# ==============================================================================
+
+### Subsetting with CellRanger's Confidence Table
+
+We will remove the empty droplets by subsetting the Seurat objects with
+the valid cell barcodes present in the CellRanger confidence tables.
+
+```{r eval=FALSE}
+# ==============================================================================
+# Subset Seurat Objects to Keep Only Valid Cells
+# ==============================================================================
+# CellRanger identifies valid cell barcodes vs empty droplets
+# We use these barcodes to filter our Seurat objects
+
+# subset(): Filters the Seurat object to keep only specified cells
+# cells parameter: Vector of cell barcodes to retain
+# confidence_tb_cellranger$CellRanger_L1$Barcode: Column containing valid barcodes
+
+# Filter Lane 1 to keep only cells identified by CellRanger
+seurat_Lane1 <- subset(seurat_Lane1, 
+                       cells = confidence_tb_cellranger$CellRanger_L1$Barcode)
+
+# Filter Lane 2 to keep only cells identified by CellRanger
+seurat_Lane2 <- subset(seurat_Lane2, 
+                       cells = confidence_tb_cellranger$CellRanger_L2$Barcode)
+
+# Filter Lane 3 to keep only cells identified by CellRanger
+seurat_Lane3 <- subset(seurat_Lane3, 
+                       cells = confidence_tb_cellranger$CellRanger_L3$Barcode)
+
+# Filter Lane 4 to keep only cells identified by CellRanger
+seurat_Lane4 <- subset(seurat_Lane4, 
+                       cells = confidence_tb_cellranger$CellRanger_L4$Barcode)
+
+# Filter Lane 5 to keep only cells identified by CellRanger
+seurat_Lane5 <- subset(seurat_Lane5, 
+                       cells = confidence_tb_cellranger$CellRanger_L5$Barcode)
+```
+
+**Explanation:**
+
+-   This step reduces the dataset to include only barcodes that
+    CellRanger has identified as valid cells.
+
+# ==============================================================================
+# SECTION 6: POST-FILTERING CELL COUNT SUMMARY
+# ==============================================================================
+
+### Display the Number of Cells Remaining After Subsetting
+
+```{r,eval=FALSE}
+# ==============================================================================
+# Create Summary Table of Cell Counts After Filtering
+# ==============================================================================
+
+# Create a data frame showing remaining cells after empty droplet removal
+cleaned_cell_counts <- data.frame(
+  Sample = c("Lane 1", "Lane 2", "Lane 3", "Lane 4", "Lane 5"),
+  Cells = c(ncol(seurat_Lane1), 
+            ncol(seurat_Lane2), 
+            ncol(seurat_Lane3), 
+            ncol(seurat_Lane4), 
+            ncol(seurat_Lane5))
+)
+
+# Display the filtered cell count table
+print(cleaned_cell_counts)
+```
+
+| Sample Name  | Amount of Cells |
+|--------------|-----------------|
+| seurat_Lane1 | 31833           |
+| seurat_Lane2 | 26969           |
+| seurat_Lane3 | 26951           |
+| seurat_Lane4 | 28537           |
+| seurat_Lane5 | 30214           |
+
+: **Explanation:**
+
+-   After subsetting, the number of cells per lane is significantly
+    reduced, as we have filtered out empty droplets and low-quality
+    cells.
+
+# Analysis
+
+We will perform demultiplexing using another method called
+**HTODemux()** from the Seurat package. Before that, we need to prepare
+the data by normalizing and identifying variable features, which are
+essential steps for the demultiplexing process.
+
+## Demultiplexing
+
+### Preparations
+
+# ==============================================================================
+# SECTION 7: RNA DATA PREPROCESSING FOR DEMULTIPLEXING
+# ==============================================================================
+
+#### RNA Data
+
+We need to process the RNA data to prepare it for demultiplexing.
+
+```{r, warning=FALSE, eval=FALSE}
+# ==============================================================================
+# Step 7.1: Set Default Assay to RNA
+# ==============================================================================
+# DefaultAssay(): Sets which assay (RNA, CMO, etc.) is used for operations
+# We set RNA as default to process transcriptome data first
+
+DefaultAssay(seurat_Lane1) <- "RNA"
+DefaultAssay(seurat_Lane2) <- "RNA"
+DefaultAssay(seurat_Lane3) <- "RNA"
+DefaultAssay(seurat_Lane4) <- "RNA"
+DefaultAssay(seurat_Lane5) <- "RNA"
+
+# ==============================================================================
+# Step 7.2: Normalize RNA Data
+# ==============================================================================
+# NormalizeData(): Applies log-normalization to the count data
+# Default method: LogNormalize with scale.factor = 10000
+# Formula: log1p(count / total_count * scale.factor)
+# This corrects for differences in sequencing depth between cells
+
+seurat_Lane1 <- NormalizeData(seurat_Lane1)
+seurat_Lane2 <- NormalizeData(seurat_Lane2)
+seurat_Lane3 <- NormalizeData(seurat_Lane3)
+seurat_Lane4 <- NormalizeData(seurat_Lane4)
+seurat_Lane5 <- NormalizeData(seurat_Lane5)
+
+# ==============================================================================
+# Step 7.3: Identify Highly Variable Features
+# ==============================================================================
+# FindVariableFeatures(): Identifies genes with high cell-to-cell variation
+# selection.method = "mean.var.plot": Uses mean-variance relationship
+# These genes are most informative for distinguishing cell populations
+
+seurat_Lane1 <- FindVariableFeatures(seurat_Lane1, selection.method = "mean.var.plot")
+seurat_Lane2 <- FindVariableFeatures(seurat_Lane2, selection.method = "mean.var.plot")
+seurat_Lane3 <- FindVariableFeatures(seurat_Lane3, selection.method = "mean.var.plot")
+seurat_Lane4 <- FindVariableFeatures(seurat_Lane4, selection.method = "mean.var.plot")
+seurat_Lane5 <- FindVariableFeatures(seurat_Lane5, selection.method = "mean.var.plot")
+
+# ==============================================================================
+# Step 7.4: Scale the Data
+# ==============================================================================
+# ScaleData(): Centers and scales expression values
+# - Shifts mean expression to 0
+# - Scales variance to 1
+# features parameter: Only scale the variable features (saves computation)
+# Required before PCA
+
+seurat_Lane1 <- ScaleData(seurat_Lane1, features = VariableFeatures(seurat_Lane1))
+seurat_Lane2 <- ScaleData(seurat_Lane2, features = VariableFeatures(seurat_Lane2))
+seurat_Lane3 <- ScaleData(seurat_Lane3, features = VariableFeatures(seurat_Lane3))
+seurat_Lane4 <- ScaleData(seurat_Lane4, features = VariableFeatures(seurat_Lane4))
+seurat_Lane5 <- ScaleData(seurat_Lane5, features = VariableFeatures(seurat_Lane5))
+```
+
+#### **Explanation:**
+
+-   **NormalizeData**: Log-normalizes the gene expression data.
+
+-   **FindVariableFeatures**: Identifies genes that exhibit high
+    variability across cells, which are informative for downstream
+    analysis.
+
+-   **ScaleData**: Scales and centers the data, which is necessary for
+    PCA.
+
+# ==============================================================================
+# SECTION 8: CMO DATA NORMALIZATION
+# ==============================================================================
+
+#### CMO Data
+
+We need to normalize the CMO (Cell Multiplexing Oligos) data.
+
+```{r eval=FALSE}
+# ==============================================================================
+# Normalize CMO Data Using Centered Log-Ratio (CLR) Method
+# ==============================================================================
+# NormalizeData() with CLR normalization is recommended for CMO/HTO data
+# CLR accounts for the compositional nature of multiplexing oligo counts
+# normalization.method = "CLR": Centered Log-Ratio transformation
+# assay = "CMO": Specifies to normalize the CMO assay, not RNA
+
+seurat_Lane1 <- NormalizeData(seurat_Lane1, 
+                               assay = "CMO", 
+                               normalization.method = "CLR")
+
+seurat_Lane2 <- NormalizeData(seurat_Lane2, 
+                               assay = "CMO", 
+                               normalization.method = "CLR")
+
+seurat_Lane3 <- NormalizeData(seurat_Lane3, 
+                               assay = "CMO", 
+                               normalization.method = "CLR")
+
+seurat_Lane4 <- NormalizeData(seurat_Lane4, 
+                               assay = "CMO", 
+                               normalization.method = "CLR")
+
+seurat_Lane5 <- NormalizeData(seurat_Lane5, 
+                               assay = "CMO", 
+                               normalization.method = "CLR")
+
+```
+
+### **Explanation:**
+
+-   The **CLR normalization** is recommended for CMO data to normalize
+    across cells.
+
+# ==============================================================================
+# SECTION 9: HTODEMUX DEMULTIPLEXING
+# ==============================================================================
+
+### HTODemux Demultiplexing
+
+We will perform demultiplexing using the **HTODemux** function with a
+positive quantile of 0.99.
+
+```{r eval=FALSE}
+# ==============================================================================
+# Run HTODemux Demultiplexing Algorithm
+# ==============================================================================
+# HTODemux(): Seurat's demultiplexing function for multiplexed samples
+# Parameters:
+# - assay = "CMO": Use the CMO assay for demultiplexing
+# - positive.quantile = 0.99: Threshold for positive classification
+#   Cells above the 99th percentile of the negative distribution are positive
+# 
+# Output adds metadata columns:
+# - CMO_maxID: CMO with highest signal
+# - CMO_secondID: CMO with second-highest signal
+# - CMO_margin: Difference between top two CMO signals
+# - CMO_classification: Specific CMO or Doublet/Negative
+# - CMO_classification.global: Singlet/Doublet/Negative
+# - hash.ID: Final sample assignment
+
+seurat_Lane1 <- HTODemux(seurat_Lane1, 
+                          assay = "CMO", 
+                          positive.quantile = 0.99)
+
+seurat_Lane2 <- HTODemux(seurat_Lane2, 
+                          assay = "CMO", 
+                          positive.quantile = 0.99)
+
+seurat_Lane3 <- HTODemux(seurat_Lane3, 
+                          assay = "CMO", 
+                          positive.quantile = 0.99)
+
+seurat_Lane4 <- HTODemux(seurat_Lane4, 
+                          assay = "CMO", 
+                          positive.quantile = 0.99)
+
+seurat_Lane5 <- HTODemux(seurat_Lane5, 
+                          assay = "CMO", 
+                          positive.quantile = 0.99)
+
+```
+
+**Explanation:**
+
+-   **HTODemux** classifies cells based on their CMO signals into
+    Singlets, Doublets, or Negative.
+
+-   The **positive.quantile** parameter sets the threshold for
+    classifying positive cells.
+
+# ==============================================================================
+# SECTION 10: HTODEMUX RESULTS ANALYSIS
+# ==============================================================================
+
+### Results of HTODemux
+
+We will examine the results of the demultiplexing.
+
+#### Display Demultiplexing Results
+
+```{r}
+# ==============================================================================
+# View Global Classification Results (Singlet/Doublet/Negative)
+# ==============================================================================
+# table(): Creates a frequency table of categorical values
+# CMO_classification.global: Contains the overall classification for each cell
+# - Singlet: Cell has one dominant CMO (from one sample)
+# - Doublet: Cell has multiple CMOs (multiplet from different samples)
+# - Negative: Cell has no clear CMO signal
+
+# Display classification counts for each lane
+table(seurat_Lane1$CMO_classification.global)
+table(seurat_Lane2$CMO_classification.global)
+table(seurat_Lane3$CMO_classification.global)
+table(seurat_Lane4$CMO_classification.global)
+table(seurat_Lane5$CMO_classification.global)
+
+```
+
+**Explanation:**
+
+-   The **CMO_classification.global** metadata field contains the global
+    classification of each cell (Singlet, Doublet, Negative).
+
+#### Highest CMOs for Each Cell
+
+```{r}
+# ==============================================================================
+# View Maximum CMO Signal Per Cell
+# ==============================================================================
+# CMO_maxID: The CMO barcode with the highest signal in each cell
+# This shows which sample's CMO was most abundant, regardless of classification
+
+# Display the distribution of maximum CMO signals for each lane
+table(seurat_Lane1$CMO_maxID)
+table(seurat_Lane2$CMO_maxID)
+table(seurat_Lane3$CMO_maxID)
+table(seurat_Lane4$CMO_maxID)
+table(seurat_Lane5$CMO_maxID)
+
+```
+
+**Explanation:**
+
+-   **CMO_maxID** indicates the CMO with the highest signal in each
+    cell.
+
+### Assignment of HTODemux
+
+```{r}
+# ==============================================================================
+# View Final Sample Assignments (hash.ID)
+# ==============================================================================
+# hash.ID: Final assignment from HTODemux
+# - For Singlets: Contains the specific CMO ID (CMO301-CMO312)
+# - For Doublets: "Doublet"
+# - For Negatives: "Negative"
+
+# Display hash.ID distribution for each lane
+table(seurat_Lane1$hash.ID)
+table(seurat_Lane2$hash.ID)
+table(seurat_Lane3$hash.ID)
+table(seurat_Lane4$hash.ID)
+table(seurat_Lane5$hash.ID)
+
+```
+
+**Explanation:**
+
+-   **hash.ID** contains the specific CMO assignment for each cell or
+    indicates if it's a Doublet or Negative.
+
+#### Merged Results Summary
+
+We can create a summary table to compare cell counts and assignments
+across lanes.
+
+**Example Table:**
+
+| Parameter       | Lane 1 | Lane 2 | Lane 3 | Lane 4 | Lane 5 |
+|-----------------|--------|--------|--------|--------|--------|
+| Number of Cells | 31,833 | 26,969 | 26,951 | 28,537 | 30,214 |
+| Singlets        | 17,294 | 17,252 | 17,902 | 19,034 | 20,151 |
+| Doublets        | 11,566 | 6,973  | 6,620  | 6,797  | 7,429  |
+| Negatives       | 2,973  | 2,744  | 2,429  | 2,706  | 2,634  |
+
+**Explanation:**
+
+-   This summary provides an overview of the demultiplexing results for
+    each lane.
+
+# ==============================================================================
+# SECTION 11: VISUALIZATION - HEATMAPS
+# ==============================================================================
+
+### Visualizations
+
+We will generate heatmaps and violin plots to visualize the
+demultiplexing results.
+
+#### Heatmaps
+
+```{r}
+# ==============================================================================
+# Generate HTODemux Heatmaps
+# ==============================================================================
+# HTOHeatmap(): Visualizes normalized CMO signals across cells
+# Parameters:
+# - assay = "CMO": Use the CMO assay data
+# - ncells = 10000: Randomly sample 10,000 cells for visualization
+# Cells are grouped by their classification, showing CMO signal patterns
+
+# Generate heatmap for Lane 1 showing CMO signal distribution
+HTOHeatmap(seurat_Lane1, assay = "CMO", ncells = 10000) + ggtitle("Lane 1")
+
+# Generate heatmap for Lane 2
+HTOHeatmap(seurat_Lane2, assay = "CMO", ncells = 10000) + ggtitle("Lane 2")
+
+# Generate heatmap for Lane 3
+HTOHeatmap(seurat_Lane3, assay = "CMO", ncells = 10000) + ggtitle("Lane 3")
+
+# Generate heatmap for Lane 4
+HTOHeatmap(seurat_Lane4, assay = "CMO", ncells = 10000) + ggtitle("Lane 4")
+
+# Generate heatmap for Lane 5
+HTOHeatmap(seurat_Lane5, assay = "CMO", ncells = 10000) + ggtitle("Lane 5")
+
+```
+
+**Explanation:**
+
+-   **HTOHeatmap** visualizes the normalized CMO signals across cells,
+    helping to assess the quality of demultiplexing.
+
+# ==============================================================================
+# SECTION 12: VISUALIZATION - VIOLIN PLOTS
+# ==============================================================================
+
+#### Violin Plots
+
+```{r}
+# ==============================================================================
+# Generate Quality Control Violin Plots
+# ==============================================================================
+# VlnPlot(): Creates violin plots of specified features
+# Parameters:
+# - features: Metadata columns to plot (nCount_RNA, nFeature_RNA)
+#   - nCount_RNA: Total UMI counts per cell
+#   - nFeature_RNA: Number of detected genes per cell
+# - pt.size = 0.1: Size of individual data points
+# - log = TRUE: Log-transform the y-axis for better visualization
+# - ncol = 2: Arrange plots in 2 columns
+# Cells are grouped by their CMO classification
+
+# Generate violin plots for Lane 1
+VlnPlot(seurat_Lane1, 
+        features = c("nCount_RNA", "nFeature_RNA"), 
+        pt.size = 0.1, 
+        log = TRUE, 
+        ncol = 2) + NoLegend()
+
+# Repeat for other lanes (Lane 2 to Lane 5)
+
+```
+
+**Explanation:**
+
+-   Violin plots show the distribution of RNA counts and detected
+    features across different classifications (Singlets, Doublets,
+    Negatives).
+
+# ==============================================================================
+# SECTION 13: DIMENSIONALITY REDUCTION - CMO-BASED UMAP
+# ==============================================================================
+
+#### UMAPs
+
+We will visualize the results using UMAP dimensionality reduction.
+
+##### CMO-Based UMAP
+
+```{r}
+# ==============================================================================
+# Perform Dimensionality Reduction on CMO Data
+# ==============================================================================
+# This creates a UMAP visualization based on CMO signal patterns
+# Helps identify how well samples separate based on their multiplexing oligos
+
+# Set CMO as the default assay for subsequent operations
+DefaultAssay(seurat_Lane1) <- "CMO"
+
+# ScaleData(): Scale all CMO features (CMO301-CMO312)
+# rownames(seurat_Lane1): Gets all feature names in the current assay
+# verbose = FALSE: Suppress progress messages
+seurat_Lane1 <- ScaleData(seurat_Lane1, 
+                           features = rownames(seurat_Lane1), 
+                           verbose = FALSE)
+
+# RunPCA(): Perform Principal Component Analysis on CMO data
+# approx = FALSE: Use exact PCA computation (more accurate for small feature sets)
+seurat_Lane1 <- RunPCA(seurat_Lane1, 
+                        features = rownames(seurat_Lane1), 
+                        approx = FALSE)
+
+# FindNeighbors(): Compute k-nearest neighbors graph
+# reduction = "pca": Use PCA coordinates
+# dims = 1:10: Use first 10 principal components
+seurat_Lane1 <- FindNeighbors(seurat_Lane1, 
+                               reduction = "pca", 
+                               dims = 1:10)
+
+# FindClusters(): Identify cell clusters using Louvain algorithm
+# resolution = 0.6: Controls cluster granularity (higher = more clusters)
+seurat_Lane1 <- FindClusters(seurat_Lane1, 
+                              resolution = 0.6, 
+                              verbose = FALSE)
+
+# RunUMAP(): Generate UMAP embedding for visualization
+# reduction.name = "cmo_umap": Name this UMAP specifically for CMO data
+seurat_Lane1 <- RunUMAP(seurat_Lane1, 
+                         reduction = "pca", 
+                         dims = 1:10, 
+                         reduction.name = "cmo_umap")
+
+# ==============================================================================
+# REPEAT FOR LANES 2-5
+# ==============================================================================
+# Apply the same dimensional reduction steps to seurat_Lane2 through seurat_Lane5
+
+```
+
+**Explanation:**
+
+-   We perform PCA and UMAP on the CMO data to visualize how cells
+    cluster based on their CMO profiles.
+
+##### Visualization of CMO-Based UMAP
+
+```{r}
+# ==============================================================================
+# Visualize CMO-Based UMAP Colored by Sample Assignment
+# ==============================================================================
+# DimPlot(): Create dimensional reduction plot
+# reduction = "cmo_umap": Use the CMO-based UMAP coordinates
+# group.by = "hash.ID": Color cells by their sample assignment
+
+# Generate UMAP plot for Lane 1 colored by hash.ID
+DimPlot(seurat_Lane1, 
+        reduction = "cmo_umap", 
+        group.by = "hash.ID") + ggtitle("Lane 1 hash.ID")
+
+# Repeat for other lanes (Lane 2 to Lane 5)
+
+```
+
+# ==============================================================================
+# SECTION 14: DIMENSIONALITY REDUCTION - RNA-BASED UMAP
+# ==============================================================================
+
+##### RNA-Based UMAP
+
+We will process the RNA data to get UMAP plots.
+
+```{r}
+# ==============================================================================
+# Perform Dimensionality Reduction on RNA Data
+# ==============================================================================
+# This creates a UMAP visualization based on gene expression patterns
+# Shows how cells cluster based on their transcriptional profiles
+
+# Set RNA as the default assay
+DefaultAssay(seurat_Lane1) <- "RNA"
+
+# NormalizeData(): Log-normalize the RNA counts
+seurat_Lane1 <- NormalizeData(seurat_Lane1)
+
+# FindVariableFeatures(): Identify highly variable genes
+# Uses default method (vst) and default number of features (2000)
+seurat_Lane1 <- FindVariableFeatures(seurat_Lane1)
+
+# ScaleData(): Center and scale expression values for variable features
+seurat_Lane1 <- ScaleData(seurat_Lane1, 
+                           features = VariableFeatures(seurat_Lane1))
+
+# RunPCA(): Perform PCA on scaled data
+seurat_Lane1 <- RunPCA(seurat_Lane1)
+
+# FindNeighbors(): Build nearest neighbor graph using PCA
+# dims = 1:10: Use first 10 principal components
+seurat_Lane1 <- FindNeighbors(seurat_Lane1, 
+                               reduction = "pca", 
+                               dims = 1:10)
+
+# FindClusters(): Cluster cells based on their expression profiles
+seurat_Lane1 <- FindClusters(seurat_Lane1, 
+                              resolution = 0.6, 
+                              verbose = FALSE)
+
+# RunUMAP(): Generate UMAP for RNA data
+# reduction.name = "rna_umap": Name this UMAP specifically for RNA data
+seurat_Lane1 <- RunUMAP(seurat_Lane1, 
+                         reduction = "pca", 
+                         dims = 1:10, 
+                         reduction.name = "rna_umap")
+
+```
+
+**Explanation:**
+
+-   We perform PCA and UMAP on the RNA data to visualize the
+    transcriptional landscape of the cells.
+
+##### Visualization of RNA-Based UMAP
+
+```{r}
+# ==============================================================================
+# Visualize RNA-Based UMAP with Various Groupings
+# ==============================================================================
+
+# Plot 1: Color by Seurat clusters (transcriptional clusters)
+# label = TRUE: Show cluster numbers on the plot
+DimPlot(seurat_Lane1, 
+        reduction = "rna_umap", 
+        group.by = "seurat_clusters", 
+        label = TRUE) + ggtitle("Lane 1 Clusters")
+
+# Plot 2: Color by CMO classification (Singlet/Doublet/Negative)
+# Shows how demultiplexing results map onto transcriptional space
+DimPlot(seurat_Lane1, 
+        reduction = "rna_umap", 
+        group.by = "CMO_classification.global") + ggtitle("Lane 1 CMO Classification")
+
+# Repeat for other lanes (Lane 2 to Lane 5)
+
+```
+
+**Explanation:**
+
+-   These plots help identify how demultiplexing results correspond to
+    transcriptional clusters.
+
+# ==============================================================================
+# SECTION 15: CLUSTER-LEVEL DEMULTIPLEXING ANALYSIS
+# ==============================================================================
+
+#### Bar Plots with Classifications of HTODemux per Cluster
+
+We will create bar plots to show the proportion of different
+classifications within each cluster.
+
+```{r}
+# ==============================================================================
+# Create Stacked Bar Plot of Classification per Cluster
+# ==============================================================================
+
+# Extract relevant metadata into a data frame
+# seurat_clusters: Cluster assignments from RNA-based clustering
+# CMO_classification.global: Demultiplexing classification
+df_lane1 <- data.frame(
+  seurat_clusters = seurat_Lane1$seurat_clusters,
+  CMO_classification.global = seurat_Lane1$CMO_classification.global
+)
+
+# Calculate percentages using dplyr pipeline
+df_lane1 <- df_lane1 %>%
+  # Group by both cluster and classification
+  group_by(seurat_clusters, CMO_classification.global) %>%
+  # Count cells in each group
+  summarise(Nb = n()) %>%
+  # Calculate total cells per cluster
+  mutate(C = sum(Nb)) %>%
+  # Calculate percentage within each cluster
+  mutate(Percent = Nb / C * 100)
+
+# Generate stacked bar plot using ggplot2
+ggplot(df_lane1, 
+       aes(fill = CMO_classification.global,  # Color by classification
+           y = Percent,                         # Y-axis shows percentage
+           x = seurat_clusters)) +              # X-axis shows clusters
+  # position = "fill": Stack bars to 100%
+  # stat = "identity": Use actual values (not counts)
+  geom_bar(position = "fill", stat = "identity") +
+  # Customize theme: rotate x-axis labels for readability
+  theme(legend.position = 'right', 
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  ggtitle("Lane 1")
+
+```
+
+**Explanation:**
+
+-   This plot shows the distribution of Singlets, Doublets, and
+    Negatives within each cluster.
+
+# ==============================================================================
+# SECTION 16: CELLRANGER VS HTODEMUX COMPARISON
+# ==============================================================================
+
+### Cell Ranger and Comparison with HTODemux()
+
+We will compare the demultiplexing results from CellRanger with those
+from HTODemux.
+
+#### Transferring CellRanger Demultiplexing Data to Seurat Objects
+
+```{r}
+# ==============================================================================
+# Add CellRanger Demultiplexing Results to Seurat Metadata
+# ==============================================================================
+
+# Extract relevant columns from CellRanger confidence table
+# Columns: Multiplet score, Blank score, Assignment, Assignment Probability
+df_for_transfer <- confidence_tb_cellranger$CellRanger_L1[, 
+  c("Multiplet", "Blank", "Assignment", "Assignment Probability")]
+
+# Rename columns for clarity when stored in Seurat metadata
+colnames(df_for_transfer) <- c("CellRanger_Multiplet_score", 
+                                "CellRanger_Blank_score", 
+                                "CellRanger_Assignment", 
+                                "Assignment_Probability")
+
+# Set cell barcodes as row names (required for AddMetaData)
+rownames(df_for_transfer) <- confidence_tb_cellranger$CellRanger_L1$Barcode
+
+# AddMetaData(): Adds new metadata columns to Seurat object
+# Matches cells by row names (barcodes)
+seurat_Lane1 <- AddMetaData(object = seurat_Lane1, 
+                             metadata = df_for_transfer)
+
+# ==============================================================================
+# REPEAT FOR LANES 2-5
+# ==============================================================================
+# Apply the same metadata transfer for seurat_Lane2 through seurat_Lane5
+
+```
+
+**Explanation:**
+
+-   We add the CellRanger demultiplexing results as metadata to the
+    Seurat objects for comparison.
+
+# ==============================================================================
+# SECTION 17: VENN DIAGRAM COMPARISON
+# ==============================================================================
+
+#### Venn Diagrams to Compare Assignments
+
+```{r}
+# ==============================================================================
+# Compare Singlet Assignments Between HTODemux and CellRanger
+# ==============================================================================
+
+# Create a list containing singlet cell barcodes from each method
+singlets_L1 <- list(
+  # HTODemux singlets: Cells classified as "Singlet" by HTODemux
+  # rownames() extracts cell barcodes from metadata subset
+  HTODemux_Singlet = rownames(
+    seurat_Lane1@meta.data[seurat_Lane1$CMO_classification.global == "Singlet",]
+  ),
+  
+  # CellRanger singlets: Cells assigned as "singlet" by CellRanger
+  # Note: CellRanger uses lowercase "singlet"
+  CellRanger_singlet = rownames(
+    seurat_Lane1@meta.data[seurat_Lane1$CellRanger_Assignment == "singlet",]
+  )
+)
+
+# Generate Venn diagram using ggvenn
+# fill_color: Colors for each set
+# stroke_size: Line thickness
+# set_name_size: Font size for set labels
+ggvenn(singlets_L1, 
+       fill_color = c("#0073C2FF", "#EFC000FF"), 
+       stroke_size = 0.5, 
+       set_name_size = 5)
+
+```
+
+**Explanation:**
+
+-   The Venn diagram visualizes the overlap between Singlet assignments
+    from HTODemux and CellRanger.
+
+# ==============================================================================
+# SECTION 18: MERGE ALL LANES
+# ==============================================================================
+
+### Merging Datasets
+
+We will merge all lanes into a single Seurat object for comprehensive
+analysis.
+
+```{r}
+# ==============================================================================
+# Merge All Seurat Objects Into One Combined Object
+# ==============================================================================
+
+# merge(): Combines multiple Seurat objects
+# x: First object to merge
+# y: List of additional objects to merge
+# Cell barcodes are made unique by appending object identifiers
+seurat_Lane0 <- merge(x = seurat_Lane1, 
+                       y = list(seurat_Lane2, 
+                               seurat_Lane3, 
+                               seurat_Lane4, 
+                               seurat_Lane5))
+
+# ==============================================================================
+# Process Merged Dataset
+# ==============================================================================
+
+# Normalize the merged data
+seurat_Lane0 <- NormalizeData(seurat_Lane0)
+
+# Find variable features across all cells
+seurat_Lane0 <- FindVariableFeatures(seurat_Lane0)
+
+# Scale the variable features
+seurat_Lane0 <- ScaleData(seurat_Lane0, 
+                           features = VariableFeatures(seurat_Lane0))
+
+# ==============================================================================
+# Dimensionality Reduction on Merged Data
+# ==============================================================================
+
+# Perform PCA on merged dataset
+seurat_Lane0 <- RunPCA(seurat_Lane0)
+
+# Build neighbor graph using more PCs (25) for larger dataset
+seurat_Lane0 <- FindNeighbors(seurat_Lane0, 
+                               reduction = "pca", 
+                               dims = 1:25)
+
+# Cluster with lower resolution (0.4) for broader groupings
+seurat_Lane0 <- FindClusters(seurat_Lane0, 
+                              resolution = 0.4, 
+                              verbose = FALSE)
+
+# Generate UMAP for merged data
+# reduction.name = "rna_umap_merged": Distinguishes from lane-specific UMAPs
+seurat_Lane0 <- RunUMAP(seurat_Lane0, 
+                         reduction = "pca", 
+                         dims = 1:25, 
+                         reduction.name = "rna_umap_merged")
+
+```
+
+**Explanation:**
+
+-   We process the merged dataset similarly to individual lanes for
+    integrated analysis.
+
+# ==============================================================================
+# SECTION 19: CELL CYCLE SCORING
+# ==============================================================================
+
+### Cell Cycle Scoring
+
+```{r}
+# ==============================================================================
+# Prepare Cell Cycle Gene Lists
+# ==============================================================================
+
+# Access Seurat's built-in cell cycle gene lists (human genes)
+# cc.genes.updated.2019: Updated version of cell cycle gene markers
+# s.genes: Genes associated with S phase (DNA synthesis)
+# g2m.genes: Genes associated with G2/M phase (cell division)
+s.genes <- cc.genes.updated.2019$s.genes
+g2m.genes <- cc.genes.updated.2019$g2m.genes
+
+# gorth(): Convert gene symbols between organisms (gprofiler2 function)
+# source_organism = 'hsapiens': Input genes are human
+# target_organism = 'mmusculus': Convert to mouse orthologs
+# $ortholog_name: Extract the mouse gene symbols
+mmus_s <- gorth(s.genes, 
+                source_organism = 'hsapiens', 
+                target_organism = 'mmusculus')$ortholog_name
+
+mmus_g2m <- gorth(g2m.genes, 
+                  source_organism = 'hsapiens', 
+                  target_organism = 'mmusculus')$ortholog_name
+
+# ==============================================================================
+# Score Cells for Cell Cycle Phase
+# ==============================================================================
+
+# Set RNA assay as default (cell cycle scoring uses RNA expression)
+DefaultAssay(seurat_Lane0) <- "RNA"
+
+# CellCycleScoring(): Assigns cell cycle phase to each cell
+# s.features: Genes marking S phase
+# g2m.features: Genes marking G2/M phase
+# set.ident = TRUE: Set cell identities to cell cycle phase
+# Adds metadata: S.Score, G2M.Score, Phase (G1, S, or G2M)
+seurat_Lane0 <- CellCycleScoring(seurat_Lane0, 
+                                  s.features = mmus_s, 
+                                  g2m.features = mmus_g2m, 
+                                  set.ident = TRUE)
+
+```
+
+**Explanation:**
+
+-   We score cells based on their cell cycle phase, which can be
+    important for interpreting clusters.
+
+# ==============================================================================
+# SECTION 20: FINAL VISUALIZATION OF MERGED DATA
+# ==============================================================================
+
+### Visualization of Merged Data
+
+```{r}
+# ==============================================================================
+# Generate UMAP Plots for Merged Dataset
+# ==============================================================================
+
+# Plot 1: Color by CellRanger demultiplexing assignment
+# Shows distribution of sample assignments in merged UMAP space
+DimPlot(seurat_Lane0, 
+        reduction = "rna_umap_merged", 
+        group.by = "CellRanger_Assignment") + ggtitle("CellRanger Assignment")
+
+# Plot 2: Color by HTODemux assignment (hash.ID)
+# Allows comparison with CellRanger assignments
+DimPlot(seurat_Lane0, 
+        reduction = "rna_umap_merged", 
+        group.by = "hash.ID") + ggtitle("HTODemux Assignment")
+
+# Plot 3: Color by cell cycle phase
+# Shows distribution of G1, S, and G2M cells across clusters
+DimPlot(seurat_Lane0, 
+        reduction = "rna_umap_merged", 
+        group.by = "Phase") + ggtitle("Cell Cycle Phase")
+
+```
+
+**Explanation:**
+
+-   These plots help visualize how cells from different lanes and
+    classifications are distributed in the integrated dataset.
+
+# Conclusions from the Analysis
+
+-   **Singlet Ratios:** Lanes 2-5 have similar singlet ratios
+    (\~62-66%), with both HTODemux and CellRanger showing comparable
+    results. Lane 1 has a lower singlet ratio and a higher difference
+    between methods, possibly due to stricter parameters in CellRanger.
+
+-   **Cell Types with High Doublets or Negatives:**
+
+    -   **Naive Pluripotent Embryonic Stem Cells** have a high
+        proportion of Negative cells.
+
+    -   **Erythroid Cells** have a high proportion of Doublets.
+
+    -   Certain clusters are enriched for Doublets or Negatives,
+        indicating specific cell types may be more prone to multiplets
+        or have issues with labeling.
+
+-   **Lane-Specific Observations:**
+
+    -   **Lane 1:** Clusters 0 and 14 are enriched for Doublets; Cluster
+        8 has a high number of Negatives and represents Naive ES cells.
+
+    -   **Other Lanes:** Similar patterns are observed with specific
+        clusters enriched for Doublets or Negatives, corresponding to
+        certain cell types.
+
+# ==============================================================================
+# SECTION 21: SESSION INFORMATION
+# ==============================================================================
+
+# Session Info
+
+```{r}
+# ==============================================================================
+# Record Session Information for Reproducibility
+# ==============================================================================
+# sessionInfo(): Displays R version, platform, and all loaded packages
+# Essential for reproducibility - others can match your exact environment
+sessionInfo()
+```
+
+**Explanation:**
+
+-   Including session information helps others reproduce the analysis by
+    knowing the package versions and environment details.
+
+# Extras
+
+|        | Lane 1 | Lane 2 | Lane 3 | Lane 4 | Lane 5 |
+|--------|--------|--------|--------|--------|--------|
+| CMO301 | 66     | 105    | 93     | 56     | 50     |
+| CMO302 | 89     | 164    | 156    | 94     | 84     |
+| CMO303 | 107    | 212    | 136    | 109    | 108    |
+| CMO304 | 74     | 124    | 102    | 90     | 81     |
+| CMO305 | 78     | 163    | 105    | 102    | 108    |
+| CMO306 | 156    | 302    | 163    | 108    | 107    |
+| CMO307 | 135    | 182    | 167    | 109    | 110    |
+| CMO308 | 110    | 222    | 154    | 128    | 79     |
+| CMO309 | 191    | 163    | 165    | 131    | 127    |
+| CMO310 | 99     | 155    | 107    | 92     | 111    |
+| CMO311 | 112    | 244    | 201    | 172    | 127    |
+| CMO312 | 275    | 131    | 149    | 99     | 98     |
+
+: Cutoffs for CMOs per Lane.
+
+|        | Lane1 | Lane2 | Lane3 | Lane4 | Lane5 |
+|--------|-------|-------|-------|-------|-------|
+| CMO301 | 3975  | 2710  | 2408  | 2560  | 2692  |
+| CMO302 | 2939  | 2335  | 2416  | 2523  | 2728  |
+| CMO303 | 2734  | 2287  | 2187  | 2357  | 2507  |
+| CMO304 | 2994  | 2130  | 2159  | 2221  | 2396  |
+| CMO305 | 2385  | 2086  | 2070  | 2206  | 2343  |
+| CMO306 | 2155  | 2055  | 2156  | 2251  | 2415  |
+| CMO307 | 2173  | 2132  | 2165  | 2294  | 2390  |
+| CMO308 | 2412  | 2277  | 2208  | 2382  | 2598  |
+| CMO309 | 2317  | 2305  | 2242  | 2347  | 2546  |
+| CMO310 | 2718  | 2286  | 2341  | 2421  | 2549  |
+| CMO311 | 3104  | 2575  | 2751  | 3012  | 2947  |
+| CMO312 | 1927  | 1791  | 1848  | 1963  | 2103  |
+
+: Highest CMO per cell.
+
++----------+----------+----------+----------+----------+----------+
+| hash.ID  | seur     | seur     | seur     | seur     | seur     |
+|          | at_Lane1 | at_Lane2 | at_Lane3 | at_Lane4 | at_Lane5 |
++==========+==========+==========+==========+==========+==========+
+| Doublet  | 11566    | 6973     | 6620     | 6797     | 7429     |
++----------+----------+----------+----------+----------+----------+
+| CMO306   | 1391     | 1504     | 1453     | 1599     | 1463     |
++----------+----------+----------+----------+----------+----------+
+| CMO312   | 1137     | 1403     | 1309     | 1314     | 1391     |
++----------+----------+----------+----------+----------+----------+
+| CMO308   | 1536     | 1743     | 1350     | 2046     | 1893     |
++----------+----------+----------+----------+----------+----------+
+| CMO303   | 1348     | 1310     | 1332     | 1708     | 1534     |
++----------+----------+----------+----------+----------+----------+
+| CMO304   | 1236     | 1345     | 1314     | 1424     | 1422     |
++----------+----------+----------+----------+----------+----------+
+| CMO307   | 1445     | 1574     | 1497     | 1622     | 1709     |
++----------+----------+----------+----------+----------+----------+
+| CMO311   | 1876     | 1438     | 1542     | 1599     | 1728     |
++----------+----------+----------+----------+----------+----------+
+| CMO309   | 1549     | 1482     | 1558     | 1682     | 1756     |
++----------+----------+----------+----------+----------+----------+
+| CMO305   | 1307     | 1270     | 1314     | 1414     | 1659     |
++----------+----------+----------+----------+----------+----------+
+| CMO302   | 1517     | 1213     | 1567     | 1625     | 2151     |
++----------+----------+----------+----------+----------+----------+
+| CMO310   | 1462     | 1406     | 2429     | 1493     | 1600     |
++----------+----------+----------+----------+----------+----------+
+| CMO301   | 1490     | 1564     | 1514     | 1543     | 1845     |
++----------+----------+----------+----------+----------+----------+
+| Negative | 2973     | 2744     | 2429     | 2706     | 2634     |
++----------+----------+----------+----------+----------+----------+
+
+: HTODemux(), hash.ID
+
+#### Merged results
+
++----------+----------+----------+----------+----------+----------+
+| P        | seur     | seur     | seur     | seur     | seur     |
+| arameter | at_Lane1 | at_Lane2 | at_Lane3 | at_Lane4 | at_Lane5 |
++==========+==========+==========+==========+==========+==========+
+| Amount   | 3065453  | 3029894  | 3216261  | 3305265  | 3010848  |
+| of Cells |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+
+| Cells in | 31833    | 26969    | 26951    | 28537    | 30214    |
+| Seurat   |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+
+| Doublet  | 11566    | 6973     | 6620     | 6797     | 7429     |
++----------+----------+----------+----------+----------+----------+
+| CMO306   | 1391     | 1504     | 1453     | 1599     | 1463     |
++----------+----------+----------+----------+----------+----------+
+| CMO312   | 1137     | 1403     | 1309     | 1314     | 1391     |
++----------+----------+----------+----------+----------+----------+
+| CMO308   | 1536     | 1743     | 1350     | 2046     | 1893     |
++----------+----------+----------+----------+----------+----------+
+| CMO303   | 1348     | 1310     | 1332     | 1708     | 1534     |
++----------+----------+----------+----------+----------+----------+
+| CMO304   | 1236     | 1345     | 1314     | 1424     | 1422     |
++----------+----------+----------+----------+----------+----------+
+| CMO307   | 1445     | 1574     | 1497     | 1622     | 1709     |
++----------+----------+----------+----------+----------+----------+
+| CMO311   | 1876     | 1438     | 1542     | 1599     | 1728     |
++----------+----------+----------+----------+----------+----------+
+| CMO309   | 1549     | 1482     | 1558     | 1682     | 1756     |
++----------+----------+----------+----------+----------+----------+
+| CMO305   | 1307     | 1270     | 1314     | 1414     | 1659     |
++----------+----------+----------+----------+----------+----------+
+| CMO302   | 1517     | 1213     | 1567     | 1625     | 2151     |
++----------+----------+----------+----------+----------+----------+
+| CMO310   | 1462     | 1406     | 2429     | 1493     | 1600     |
++----------+----------+----------+----------+----------+----------+
+| CMO301   | 1490     | 1564     | 1514     | 1543     | 1845     |
++----------+----------+----------+----------+----------+----------+
+| Negative | 2973     | 2744     | 2429     | 2706     | 2634     |
++----------+----------+----------+----------+----------+----------+
+| Lane 1   | 66       | 105      | 93       | 56       | 50       |
+| Cutoff   |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+
+| Lane 2   | 89       | 164      | 156      | 94       | 84       |
+| Cutoff   |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+
+| Lane 3   | 107      | 212      | 136      | 109      | 108      |
+| Cutoff   |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+
+| Lane 4   | 74       | 124      | 102      | 90       | 81       |
+| Cutoff   |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+
+| Lane 5   | 78       | 163      | 105      | 102      | 108      |
+| Cutoff   |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+
