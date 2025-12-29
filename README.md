@@ -11,19 +11,19 @@ Bioinformatics analysis code and supporting resources for:
   - https://journals.biologists.com/dev/article/152/23/dev204792/370054/Distinct-roles-of-Atf3-Zfp711-and-Bcl6b-in-early
   - DOI: https://doi.org/10.1242/dev.204792
 
-- **Preprint (bioRxiv):** https://www.biorxiv.org/content/10.1101/2025.02.23.639715v1  
-  DOI: https://doi.org/10.1101/2025.02.23.639715
+- **Preprint (bioRxiv):**
+  - https://www.biorxiv.org/content/10.1101/2025.02.23.639715v1
+  - DOI: https://doi.org/10.1101/2025.02.23.639715
 
-- **Project website (GitHub Pages):** https://ridvan-cetin.github.io/CMO_Atf3_Zfp711_Bcl6b/
+- **Project website (GitHub Pages):**
+  - https://ridvan-cetin.github.io/CMO_Atf3_Zfp711_Bcl6b/
 
-- **Interactive single-cell explorer (Shiny):** https://ridvan.shinyapps.io/shinyapp/
-
+- **Interactive single-cell explorer (Shiny):**
+  - https://ridvan.shinyapps.io/shinyapp/
+  
 ## What is in this repository
 
 This repository contains the analysis notebooks/scripts used to process and analyze multiplexed single-cell RNA-seq and flow cytometry data generated from in vitro differentiating mouse ESCs, including KO vs WT comparisons for **Atf3**, **Zfp711**, and **Bcl6b**.
-
-Primary analysis “entry points” (linked files are in `Analysis_Codes/`):
-
 
 Primary analysis “entry points” (linked files are in `Analysis_Codes/`):
 
