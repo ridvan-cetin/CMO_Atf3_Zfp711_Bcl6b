@@ -1,0 +1,377 @@
+---
+title: "Differential Gene Expression Analysis with DESeq2"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+
+Pseudobulked differential gene expression analysis with DESeq2. Process will be repeated for each annotations in groups, clusters and sub-clusters. And number of significant genes will be stored in a table as a summary table.
+
+gene_info can be found in either in github or in the gse.
+```{r eval=FALSE}
+suppressPackageStartupMessages({
+library(Seurat)
+library(DESeq2)
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(ggrepel)
+library(ggvenn)
+library(venn)
+library(tidyverse)
+library(VennDiagram)
+library(cowplot)
+library(UpSetR)  
+})
+```
+
+
+# Data Preprocessing
+
+Example code for analysis. It will be repeated for conditions which desired.
+
+```{r  eval=FALSE}
+Atf3NT <- readRDS("~/cmo_chapter_v1/Analysis/RDS/CMO/cmo_CA.RDS")
+gene_info <- read.csv("~/cmo_chapter/figs/DEG/gene_info.csv")
+# Gene_info is extracted from cellranger's annotation file contains gene symbol and ensmbl name. 
+```
+
+
+```{r  eval=FALSE}
+## Setting the Idents
+Idents(Atf3NT) <- "cl_3"
+## gene of interest
+gene_of_interest <- "Atf3"
+## Define the output folder
+output_folder <- "DESeq2_results_Atf3_cl_3"
+dir.create(output_folder, showWarnings = FALSE)
+## cleaning up the remaning levels(from subsetting etc)
+Atf3NT$Samples <- droplevels(Atf3NT$Samples_lv)
+Atf3NT$c_groups <- droplevels(Atf3NT$cl_3)
+## Getting the cluster names     
+cluster_names <- unique(Atf3NT$c_groups)
+## Average Expression
+exp <- AverageExpression(Atf3NT, features = "Atf3")
+exp <- exp$RNA
+exp <- as.data.frame(exp)
+## psudobulk
+cts <- AggregateExpression(Atf3NT,group.by = c("c_groups","Samples"),
+                                    assays = "RNA",
+                                    slot = "counts",
+                                    return.seurat = F)
+# Just follow
+#------------------------------------------------------------------------------------------------------------------
+cts <- cts$RNA
+# transpose
+cts.t <- t(cts)
+# cnvert to data.frame
+cts.t <- as.data.frame(cts.t)
+# get values where to split
+splitRows <- gsub('_.*', '', rownames(cts.t))
+# split data.frame
+cts.split <- split.data.frame(cts.t,
+               f = factor(splitRows))
+#fix colnames ANd trANspose
+cts.split.modified <- lapply(cts.split, function(x){
+  rownames(x) <- gsub('.*_(.*)', '\\1', rownames(x))
+  t(x)
+})
+```
+
+
+
+```{r  eval=FALSE}
+# Adapt summary_dataframe structure for the new requirements including average expression
+summary_dataframe <- data.frame(
+  cluster=character(),
+  average_expression=integer(),
+  total_genes=integer(),
+  included_genes=integer(),
+  excluded_genes=integer(),
+  padj_0_01=integer(),
+  upregulated_genes_padj_0_01=integer(),
+  downregulated_genes_padj_0_01=integer(),
+  padj_0_05=integer(),
+  upregulated_genes_padj_0_05=integer(),
+  downregulated_genes_padj_0_05=integer(),
+  padj_0_1=integer(),
+  upregulated_genes_padj_0_1=integer(),
+  downregulated_genes_padj_0_1=integer(),
+  pvalue_0_05=integer(),
+  upregulated_genes_pvalue_0_05=integer(),
+  downregulated_genes_pvalue_0_05=integer(),
+  stringsAsFactors=FALSE
+)
+
+# Loop through each cluster
+for (cluster_name in cluster_names) {
+  if (cluster_name %in% names(cts.split.modified)) {
+    counts_cluster <- cts.split.modified[[cluster_name]]
+
+    # Calculate average expression for the gene of interest
+     avg_exp <- exp[[cluster_name]]
+     
+    colData <- data.frame(samples = colnames(counts_cluster))
+    colData <- colData %>%
+
+mutate(condition = ifelse(grepl(gene_of_interest, samples), 'KO', 'NT')) %>%
+      column_to_rownames(var = 'samples')
+    
+    # Create DESeq2 object
+    dds <- DESeqDataSetFromMatrix(countData = counts_cluster,
+                                  colData = colData,
+                                  design = ~ condition)
+
+    # Pre-filtering
+    smallestGroupSize <- 3
+    total_genes_before <- nrow(dds)
+    keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
+    dds <- dds[keep,]
+    total_genes_after <- nrow(dds)
+    
+    # DESeq2 analysis
+    dds$condition <- relevel(dds$condition, ref = "NT")
+    dds <- DESeq(dds)
+    res <- results(dds)
+    resOrdered <- res[order(res$pvalue),]
+    
+    resOrdered <- resOrdered %>%
+        data.frame() %>%
+        rownames_to_column(var="gene") %>%
+        as_tibble()
+    
+    # Enhancing res and resOrdered with gene_info
+    resOrdered_enhanced <- merge(resOrdered, gene_info, by.x = "gene", by.y = "gene_symbol", all.x = TRUE)
+
+    # Save the enhanced results for each cluster
+    save(res, file=paste0(output_folder, "/", cluster_name, "_res.RData"))
+    save(resOrdered_enhanced, file=paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.RData"))
+    write.table(resOrdered_enhanced, file=paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.txt"), sep = '\t',quote = F, row.names = F)
+    save(dds, file=paste0(output_folder, "/", cluster_name, "_dds.RData"))
+    write.table(counts_cluster, file=paste0(output_folder, "/", cluster_name, "_counts_cluster_table.txt"), sep = '\t',quote = F, row.names = F)
+
+    # Handling NA values for summary statistics
+    complete_cases <- complete.cases(resOrdered_enhanced$padj, resOrdered_enhanced$log2FoldChange)
+
+    # Update summary data frame with the calculated average expression
+    summary_dataframe <- rbind(summary_dataframe, 
+                               data.frame(
+                                 cluster=cluster_name,
+                                 average_expression=avg_exp,
+                                 total_genes=total_genes_before,
+                                 included_genes=total_genes_after,
+                                 excluded_genes=total_genes_before - total_genes_after,
+                                 padj_0_01=sum(complete_cases & resOrdered_enhanced$padj < 0.01, na.rm = TRUE),
+                                 upregulated_genes_padj_0_01=sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_01=sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 padj_0_05=sum(complete_cases & resOrdered_enhanced$padj < 0.05, na.rm = TRUE),
+                                 upregulated_genes_padj_0_05=sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_05=sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 padj_0_1=sum(complete_cases & resOrdered_enhanced$padj < 0.1, na.rm = TRUE),
+                                 upregulated_genes_padj_0_1=sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_1=sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 pvalue_0_05=sum(complete_cases & resOrdered_enhanced$pvalue < 0.05, na.rm = TRUE),
+                                 upregulated_genes_pvalue_0_05=sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_pvalue_0_05=sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE)
+                               ))
+  }
+}
+```
+
+```{r}
+# Save the final summary data frame
+write.csv(summary_dataframe, file=paste0(output_folder, "/summary_dataframe.csv"), row.names = FALSE)
+```
+
+```{r  eval=FALSE}
+Idents(Atf3NT) <- "cl_2"
+levels(Atf3NT)
+```
+
+```{r eval=FALSE}
+# Adapt summary_dataframe structure for the new requirements including average expression
+summary_dataframe <- data.frame(
+  cluster=character(),
+  average_expression=integer(),
+  total_genes=integer(),
+  included_genes=integer(),
+  excluded_genes=integer(),
+  padj_0_01=integer(),
+  upregulated_genes_padj_0_01=integer(),
+  downregulated_genes_padj_0_01=integer(),
+  padj_0_05=integer(),
+  upregulated_genes_padj_0_05=integer(),
+  downregulated_genes_padj_0_05=integer(),
+  padj_0_1=integer(),
+  upregulated_genes_padj_0_1=integer(),
+  downregulated_genes_padj_0_1=integer(),
+  pvalue_0_05=integer(),
+  upregulated_genes_pvalue_0_05=integer(),
+  downregulated_genes_pvalue_0_05=integer(),
+  stringsAsFactors=FALSE
+)
+```
+
+```{r eval=FALSE}
+## Setting the Idents
+Idents(Atf3NT) <- "cl_2"
+Atf3NT$ident <- Atf3NT$cl_2
+## gene of interest
+gene_of_interest <- "Atf3"
+## Define the output folder
+output_folder <- "DESeq2_results_Atf3_cl_2"
+dir.create(output_folder, showWarnings = FALSE)
+## cleaning up the remaning levels(from subsetting etc)
+Atf3NT$Samples <- droplevels(Atf3NT$Samples_lv)
+Atf3NT$c_groups <- droplevels(Atf3NT$cl_2)
+
+## Average Expression
+exp <- AverageExpression(Atf3NT, features = "Atf3")
+exp <- exp$RNA
+exp <- as.data.frame(exp)
+## psudobulk
+cts <- AggregateExpression(Atf3NT,group.by = c("c_groups","Samples"),
+                                    assays = "RNA",
+                                    slot = "counts",
+                                    return.seurat = F)
+# Just follow
+#------------------------------------------------------------------------------------------------------------------
+cts <- cts$RNA
+# transpose
+cts.t <- t(cts)
+# cnvert to data.frame
+cts.t <- as.data.frame(cts.t)
+# get values where to split
+splitRows <- gsub('_.*', '', rownames(cts.t))
+# split data.frame
+cts.split <- split.data.frame(cts.t,
+               f = factor(splitRows))
+#fix colnames ANd trANspose
+cts.split.modified <- lapply(cts.split, function(x){
+  rownames(x) <- gsub('.*_(.*)', '\\1', rownames(x))
+  t(x)
+})
+
+
+## Getting the cluster names     
+cluster_names <- names(cts.split.modified)
+```
+
+```{r  eval=FALSE}
+# Adapt summary_dataframe structure for the new requirements including average expression
+summary_dataframe <- data.frame(
+  cluster=character(),
+  average_expression=integer(),
+  total_genes=integer(),
+  included_genes=integer(),
+  excluded_genes=integer(),
+  padj_0_01=integer(),
+  upregulated_genes_padj_0_01=integer(),
+  downregulated_genes_padj_0_01=integer(),
+  padj_0_05=integer(),
+  upregulated_genes_padj_0_05=integer(),
+  downregulated_genes_padj_0_05=integer(),
+  padj_0_1=integer(),
+  upregulated_genes_padj_0_1=integer(),
+  downregulated_genes_padj_0_1=integer(),
+  pvalue_0_05=integer(),
+  upregulated_genes_pvalue_0_05=integer(),
+  downregulated_genes_pvalue_0_05=integer(),
+  stringsAsFactors=FALSE
+)
+
+# Loop through each cluster
+for (cluster_name in cluster_names) {
+  if (cluster_name %in% names(cts.split.modified)) {
+    counts_cluster <- cts.split.modified[[cluster_name]]
+
+    # Calculate average expression for the gene of interest
+     avg_exp <- exp[[cluster_name]]
+
+     
+    colData <- data.frame(samples = colnames(counts_cluster))
+    colData <- colData %>%
+
+mutate(condition = ifelse(grepl(gene_of_interest, samples), 'KO', 'NT')) %>%
+      column_to_rownames(var = 'samples')
+    
+    # Create DESeq2 object
+    dds <- DESeqDataSetFromMatrix(countData = counts_cluster,
+                                  colData = colData,
+                                  design = ~ condition)
+
+    # Pre-filtering
+    smallestGroupSize <- 3
+    total_genes_before <- nrow(dds)
+    keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
+    dds <- dds[keep,]
+    total_genes_after <- nrow(dds)
+    
+    # DESeq2 analysis
+    dds$condition <- relevel(dds$condition, ref = "NT")
+    dds <- DESeq(dds)
+    res <- results(dds)
+    resOrdered <- res[order(res$pvalue),]
+    
+    resOrdered <- resOrdered %>%
+        data.frame() %>%
+        rownames_to_column(var="gene") %>%
+        as_tibble()
+    
+    # Enhancing res and resOrdered with gene_info
+    resOrdered_enhanced <- merge(resOrdered, gene_info, by.x = "gene", by.y = "gene_symbol", all.x = TRUE)
+
+    # Save the enhanced results for each cluster
+    save(res, file=paste0(output_folder, "/", cluster_name, "_res.RData"))
+    save(resOrdered_enhanced, file=paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.RData"))
+    write.table(resOrdered_enhanced, file=paste0(output_folder, "/", cluster_name, "_resOrdered_enhanced.txt"), sep = '\t',quote = F, row.names = F)
+    save(dds, file=paste0(output_folder, "/", cluster_name, "_dds.RData"))
+    write.table(counts_cluster, file=paste0(output_folder, "/", cluster_name, "_counts_cluster_table.txt"), sep = '\t',quote = F, row.names = F)
+
+    # Handling NA values for summary statistics
+    complete_cases <- complete.cases(resOrdered_enhanced$padj, resOrdered_enhanced$log2FoldChange)
+
+    # Update summary data frame with the calculated average expression
+    summary_dataframe <- rbind(summary_dataframe, 
+                               data.frame(
+                                 cluster=cluster_name,
+                                 average_expression=avg_exp,
+                                 total_genes=total_genes_before,
+                                 included_genes=total_genes_after,
+                                 excluded_genes=total_genes_before - total_genes_after,
+                                 padj_0_01=sum(complete_cases & resOrdered_enhanced$padj < 0.01, na.rm = TRUE),
+                                 upregulated_genes_padj_0_01=sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_01=sum(complete_cases & resOrdered_enhanced$padj < 0.01 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 padj_0_05=sum(complete_cases & resOrdered_enhanced$padj < 0.05, na.rm = TRUE),
+                                 upregulated_genes_padj_0_05=sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_05=sum(complete_cases & resOrdered_enhanced$padj < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 padj_0_1=sum(complete_cases & resOrdered_enhanced$padj < 0.1, na.rm = TRUE),
+                                 upregulated_genes_padj_0_1=sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_padj_0_1=sum(complete_cases & resOrdered_enhanced$padj < 0.1 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE),
+                                 pvalue_0_05=sum(complete_cases & resOrdered_enhanced$pvalue < 0.05, na.rm = TRUE),
+                                 upregulated_genes_pvalue_0_05=sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange > 0, na.rm = TRUE),
+                                 downregulated_genes_pvalue_0_05=sum(complete_cases & resOrdered_enhanced$pvalue < 0.05 & resOrdered_enhanced$log2FoldChange < 0, na.rm = TRUE)
+                               ))
+  }
+}
+```
+
+```{r eval=FALSE}
+# Save the final summary data frame
+write.csv(summary_dataframe, file=paste0(output_folder, "/summary_dataframe.csv"), row.names = FALSE)
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+

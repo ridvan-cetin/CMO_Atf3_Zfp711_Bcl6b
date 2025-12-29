@@ -1,0 +1,929 @@
+---
+title: "DAA-miloR"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+Differential abundance analysis with miloR is applied for each ko and control pair for each group (Early Differentiation, Late Mesoderm, Hematopoietic).
+```{r eval=FALSE,}
+r3dcol <- list()
+r3dcol$cols_94 <- c(
+  "#F0E442","#1CE6FF","#FF34FF","#FF4A46","#008941","#006FA6","#A30059","#FFDBE5","#7A4900","#0089A3",
+  "#63FFAC","#B79762",
+  "#004D43","#8FB0FF","#997D87","#809693","#6A3A4C","#b4b701","#4FC601","#3B5DFF","#FF2F80","#61615A",
+  "#BA0900","#6B7900",
+  "#00C2A0","#FFAA92","#FF90C9","#B903AA","#D16100","#922329","#7B4F4B","#A1C299","#0AA6D8","#00846F",
+  "#FFB500","#C2FFED",
+  "#A079BF","#CC0744","#C0B9B2","#C2FF99","#00489C","#6F0062","#0CBD66","#EEC3FF","#456D75","#B77B68",
+  "#7A87A1","#788D66",
+  "#885578","#FAD09F","#FF8A9A","#D157A0","#BEC459","#456648","#0086ED","#886F4C","#34362D","#B4A8BD",
+  "#00A6AA","#452C2C",
+  "#636375","#A3C8C9","#FF913F","#938A81","#575329","#00FECF","#B05B6F","#8CD0FF","#3B9700","#04F757",
+  "#C8A1A1","#1E6E00",
+  "#7900D7","#A77500","#6367A9","#A05837","#6B002C","#772600","#D790FF","#9B9700","#549E79","#FFF69F",
+  "#201625","#72418F",
+  "#BC23FF","#99ADC0","#3A2465","#DDEFFF","#5B4534","#FDE8DC","#404E55","#CB7E98","#A4E804","#324E72"
+)
+r3dcol$cols_46 <- c(
+  "#FFB500","#00C2A0","#D157A0","#8CD0FF","#FF4A46","#FDE8DC","#63FFAC","#B79762","#8FB0FF","#997D87",
+  "#809693","#b4b701",
+  "#4FC601","#FFAA92","#FF90C9","#A1C299","#F0E442","#C2FFED","#A079BF","#C0B9B2","#C2FF99","#EEC3FF",
+  "#B77B68","#7A87A1",
+  "#788D66","#FAD09F","#FF8A9A","#BEC459","#B4A8BD","#A3C8C9","#FF913F","#938A81","#00FECF","#FF34FF",
+  "#1CE6FF","#04F757",
+  "#C8A1A1","#D790FF","#9B9700","#549E79","#FFF69F","#99ADC0","#DDEFFF","#FFDBE5","#CB7E98","#A4E804"
+)
+r3dcol$cols_pjsala <- c(
+  "#005579","#0F4A9C","#139992","#1A1A1A","#354E23","#3F84AA","#532C8A","#635547","#647a4f","#65A83E",
+  "#7F6874","#8870ad",
+  "#8DB5CE","#8EC792","#989898","#9e6762","#B51D8D","#c19f70","#C3C388","#C594BF","#C72228","#c9a997",
+  "#C9EBFB","#cc7818",
+  "#CDE088","#DABE99","#DFCDE4","#EF4E22","#EF5A9D","#F397C0","#F6BFCB","#f79083","#f7f79e","#f9decf",
+  "#FACB12","#FBBE92",
+  "#ff891c"
+)
+r3dcol$cols_4x3 <- c(
+  "#551153","#970098","#9c24cd","#412c00","#997600","#c6a000","#1e3604","#355e07","#4f890e","#002f64",
+  "#0050ae","#1077f3"
+)
+r3dcol$cols_12x1 <- c(
+  '#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a',
+  '#ffff99','#b15928'
+)
+r3dcol$cols_4x3b <- c(
+  "#551153","#970098","#cc34cd","#c85b00","#f98517","#fdbf6f","#00603d","#008c5c","#33b983","#002f64",
+  "#0050ae","#1077f3"
+)
+r3dcol$cols_4x1 <- c(
+  "#970098","#997600","#4f890e","#0050ae"
+)
+r3dcol$cols_4x1b <- c(
+  "#970098","#f98517","#008c5c","#1077f3"
+)
+r3dcol$cols_3a <- c(
+  "#D157A0","#FFB500","#00C2A0"
+)
+r3dcol$cols_3b <- c(
+  "#D454B5","#c85b00","#008c5c"
+)
+```
+
+```{r eval=FALSE}
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(miloR)
+  library(dplyr)
+  library(scater)
+  library(speckle)
+  library(ggplot2)
+})
+```
+
+
+
+# MiloR - Analysis
+
+## Early
+
+```{r eval=FALSE}
+# Load the required RDS files for the early subgroup data for each condition
+early_ControlAtf3 <- readRDS("~/cmo_chapter/introduction/rds/Early/early_CA.RDS")
+early_ControlBcl6b <- readRDS("~/cmo_chapter/introduction/rds/Early/early_BA.RDS")
+early_ControlZfp711 <- readRDS("~/cmo_chapter/introduction/rds/Early/early_ZA.RDS")
+
+# Convert the data to SingleCellExperiment objects and add PCA embeddings
+sceAtf3NT <- as.SingleCellExperiment(early_ControlAtf3)
+reducedDim(sceAtf3NT, "PCA") <- early_ControlAtf3@reductions$pcaearly@cell.embeddings
+Atf3NT_milo <- Milo(sceAtf3NT)
+
+sceBcl6bNT <- as.SingleCellExperiment(early_ControlBcl6b)
+reducedDim(sceBcl6bNT, "PCA") <- early_ControlBcl6b@reductions$pcaearly@cell.embeddings
+Bcl6bNT_milo <- Milo(sceBcl6bNT)
+
+sceZfp711NT <- as.SingleCellExperiment(early_ControlZfp711)
+reducedDim(sceZfp711NT, "PCA") <- early_ControlZfp711@reductions$pcaearly@cell.embeddings
+Zfp711NT_milo <- Milo(sceZfp711NT)
+
+# Build neighborhood graphs for each condition
+Atf3NT_milo <- buildGraph(Atf3NT_milo, k = 35, d = 50)
+Bcl6bNT_milo <- buildGraph(Bcl6bNT_milo, k = 35, d = 50)
+Zfp711NT_milo <- buildGraph(Zfp711NT_milo, k = 35, d = 50)
+
+# Create neighborhoods with refinement
+Atf3NT_milo <- makeNhoods(Atf3NT_milo, prop = 0.3, k = 35, d = 50, refined = TRUE)
+Bcl6bNT_milo <- makeNhoods(Bcl6bNT_milo, prop = 0.3, k = 35, d = 50, refined = TRUE)
+Zfp711NT_milo <- makeNhoods(Zfp711NT_milo, prop = 0.3, k = 35, d = 50, refined = TRUE)
+
+# Plot neighborhood size histograms for each condition
+plotNhoodSizeHist(Atf3NT_milo) + scale_x_continuous(breaks = seq(0, 300, 25)) +
+  ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                   size = 20, face = "bold.italic"))
+
+plotNhoodSizeHist(Bcl6bNT_milo) + scale_x_continuous(breaks = seq(0, 300, 25)) +
+  ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                    size = 20, face = "bold.italic"))
+
+plotNhoodSizeHist(Zfp711NT_milo) + scale_x_continuous(breaks = seq(0, 300, 25)) +
+  ggtitle("Zfp711-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                     size = 20, face = "bold.italic"))
+
+# Convert sample IDs to character type
+Atf3NT_milo@colData@listData[["Samples"]] <- as.character(Atf3NT_milo@colData@listData$Samples_lv)
+Bcl6bNT_milo@colData@listData[["Samples"]] <- as.character(Bcl6bNT_milo@colData@listData$Samples_lv)
+Zfp711NT_milo@colData@listData[["Samples"]] <- as.character(Zfp711NT_milo@colData@listData$Samples_lv)
+
+# Count cells in each neighborhood
+Atf3NT_milo <- countCells(Atf3NT_milo, meta.data = data.frame(colData(Atf3NT_milo)),
+                          samples = "Samples")
+Bcl6bNT_milo <- countCells(Bcl6bNT_milo, meta.data = data.frame(colData(Bcl6bNT_milo)), 
+                           samples = "Samples")
+Zfp711NT_milo <- countCells(Zfp711NT_milo, meta.data = data.frame(colData(Zfp711NT_milo)),
+                            samples = "Samples")
+
+# Create experimental design data frames for each condition
+Atf3NT_design <- data.frame(colData(Atf3NT_milo))[, c("Samples", "Conditions")]
+Atf3NT_design <- distinct(Atf3NT_design)
+rownames(Atf3NT_design) <- Atf3NT_design$Samples
+Atf3NT_design$Conditions <- factor(Atf3NT_design$Conditions, levels = c("Control", "Atf3KO"))
+
+Bcl6bNT_design <- data.frame(colData(Bcl6bNT_milo))[, c("Samples", "Conditions")]
+Bcl6bNT_design <- distinct(Bcl6bNT_design)
+rownames(Bcl6bNT_design) <- Bcl6bNT_design$Samples
+
+Zfp711NT_design <- data.frame(colData(Zfp711NT_milo))[, c("Samples", "Conditions")]
+Zfp711NT_design <- distinct(Zfp711NT_design)
+rownames(Zfp711NT_design) <- Zfp711NT_design$Samples
+
+# Calculate neighborhood distances
+Atf3NT_milo <- calcNhoodDistance(Atf3NT_milo, d = 50)
+Bcl6bNT_milo <- calcNhoodDistance(Bcl6bNT_milo, d = 50)
+Zfp711NT_milo <- calcNhoodDistance(Zfp711NT_milo, d = 50)
+
+# Perform differential abundance tests
+Atf3NT_da_results <- testNhoods(Atf3NT_milo, design = ~ Conditions, design.df = Atf3NT_design)
+Bcl6bNT_da_results <- testNhoods(Bcl6bNT_milo, design = ~ Conditions, design.df = Bcl6bNT_design)
+Zfp711NT_da_results <- testNhoods(Zfp711NT_milo, design = ~ Conditions, design.df = Zfp711NT_design)
+
+# Display top DA results based on Spatial FDR
+Atf3NT_da_results %>% arrange(-SpatialFDR) %>% head()
+Bcl6bNT_da_results %>% arrange(-SpatialFDR) %>% head()
+Zfp711NT_da_results %>% arrange(-SpatialFDR) %>% head()
+
+# Plot histograms of p-values
+ggplot(Atf3NT_da_results, aes(PValue)) + geom_histogram(bins = 100) + theme_classic() +
+  ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                   size = 20, face = "bold.italic"))
+
+ggplot(Bcl6bNT_da_results, aes(PValue)) + geom_histogram(bins = 100) + theme_classic() +
+  ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                    size = 20, face = "bold.italic"))
+
+ggplot(Zfp711NT_da_results, aes(PValue)) + geom_histogram(bins = 100) + theme_classic() +
+  ggtitle("Zfp711-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5,
+                                                                     size = 20, face = "bold.italic"))
+
+# Plot PValue vs SpatialFDR for each condition
+plot_grid(
+  ggplot(Atf3NT_da_results, aes(PValue, SpatialFDR)) + geom_point() + theme_classic() +
+    ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                     size = 20, face = "bold.italic")),
+  ggplot(Bcl6bNT_da_results, aes(PValue, SpatialFDR)) + geom_point() + theme_classic() +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                      size = 20, face = "bold.italic")),
+  ggplot(Zfp711NT_da_results, aes(PValue, SpatialFDR)) + geom_point() + theme_classic() +
+    ggtitle("Zfp711-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5,
+                                                                       size = 20, face = "bold.italic")),
+  ncol = 3
+)
+
+# Plot logFC vs -log10(SpatialFDR) for each condition
+plot_grid(
+  ggplot(Atf3NT_da_results, aes(logFC, -log10(SpatialFDR))) + geom_point() + 
+    geom_hline(yintercept = 1) + theme_classic() +
+    ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                     hjust = 0.5, size = 20, 
+                                                                     face = "bold.italic")),
+  ggplot(Bcl6bNT_da_results, aes(logFC, -log10(SpatialFDR))) + geom_point() + 
+    geom_hline(yintercept = 1) + theme_classic() +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = 
+                                                                        "black", hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ggplot(Zfp711NT_da_results, aes(logFC, -log10(SpatialFDR))) + geom_point() + 
+    geom_hline(yintercept = 1) + theme_classic() +
+    ggtitle("Zfp711-KO and Control") + theme(plot.title = element_text(color = 
+                                                                         "black", hjust = 0.5, size = 20,
+                                                                       face = "bold.italic")),
+  ncol = 3
+)
+
+# Plot neighborhood MA plots for each condition
+plot_grid(
+  plotNhoodMA(Atf3NT_da_results) + theme_classic() +
+    ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5,
+                                                                     size = 20, face = "bold.italic")),
+  plotNhoodMA(Bcl6bNT_da_results) + theme_classic() +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                      size = 20, face = "bold.italic")),
+  plotNhoodMA(Zfp711NT_da_results) + theme_classic() +
+    ggtitle("Zfp711-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5,
+                                                                       size = 20, face = "bold.italic")),
+  ncol = 3
+)
+
+# Build neighborhood graphs for visualization
+Atf3NT_milo <- buildNhoodGraph(Atf3NT_milo)
+Bcl6bNT_milo <- buildNhoodGraph(Bcl6bNT_milo)
+Zfp711NT_milo <- buildNhoodGraph(Zfp711NT_milo)
+
+# Plot UMAPs and neighborhood graphs for each condition
+plot_grid(
+  plotReducedDim(Atf3NT_milo, dimred = "UMAPEARLY", colour_by = "cl_3", text_size = 4,
+                 text_colour = 'black') +
+    ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black",
+                                                                     hjust = 0.5, size = 20, 
+                                                                     face = "bold.italic")) +
+    theme(legend.text = element_text(angle = 0, size = 15), legend.title = 
+            element_text(size = 0, hjust = 0.5, vjust = 1, face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) +
+    theme(legend.direction = "vertical", legend.position = "left"),
+  plotNhoodGraphDA(Atf3NT_milo, Atf3NT_da_results, layout = "UMAPEARLY", alpha = 0.5) +
+    ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                     hjust = 0.5, size = 20,
+                                                                     face = "bold.italic")),
+  ncol = 2
+)
+
+plot_grid(
+  plotReducedDim(Bcl6bNT_milo, dimred = "UMAPEARLY", colour_by = "cl_3", text_size = 4,
+                 text_colour = 'black') +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                      hjust = 0.5, size = 20, 
+                                                                      face = "bold.italic")) +
+    theme(legend.text = element_text(angle = 0, size = 15), legend.title = 
+            element_text(size = 0, hjust = 0.5, vjust = 1, face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) +
+    theme(legend.direction = "vertical", legend.position = "left"),
+  plotNhoodGraphDA(Bcl6bNT_milo, Bcl6bNT_da_results, layout = "UMAPEARLY", alpha = 0.5) +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                      hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ncol = 2
+)
+
+plot_grid(
+  plotReducedDim(Zfp711NT_milo, dimred = "UMAPEARLY", colour_by = "cl_3", 
+                 text_size = 4, text_colour = 'black') +
+    ggtitle("Zfp711-KO and Control") + 
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20, face = "bold.italic")) +
+    theme(legend.text = element_text(angle = 0, 
+                                     size = 15), legend.title =
+            element_text(size = 0, hjust = 0.5, vjust = 1, face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) +
+    theme(legend.direction = "vertical", legend.position = "left"),
+  plotNhoodGraphDA(Zfp711NT_milo, 
+                   Zfp711NT_da_results, layout = "UMAPEARLY", alpha = 0.5) +
+    ggtitle("Zfp711-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20, face = "bold.italic")),
+  ncol = 2
+)
+
+# Annotate neighborhoods based on cluster identity and calculate mixed clusters
+Atf3NT_da_results <- annotateNhoods(Atf3NT_milo, Atf3NT_da_results, coldata_col = "cl_3")
+lv_early <- levels(early_ControlAtf3$cl_3)
+Atf3NT_da_results$cl_3_lv <- factor(Atf3NT_da_results$cl_3, levels = lv_early)
+
+Bcl6bNT_da_results <- annotateNhoods(Bcl6bNT_milo, Bcl6bNT_da_results, coldata_col = "cl_3")
+Bcl6bNT_da_results$cl_3_lv <- factor(Bcl6bNT_da_results$cl_3, levels = lv_early)
+
+Zfp711NT_da_results <- annotateNhoods(Zfp711NT_milo, Zfp711NT_da_results, coldata_col = "cl_3")
+Zfp711NT_da_results$cl_3_lv <- factor(Zfp711NT_da_results$cl_3, levels = lv_early)
+
+Atf3NT_da_results$cl_3_mx <-
+  ifelse(Atf3NT_da_results$cl_3_fraction < 0.5, "Mixed", Atf3NT_da_results$cl_3)
+Bcl6bNT_da_results$cl_3_mx <- 
+  ifelse(Bcl6bNT_da_results$cl_3_fraction < 0.5, "Mixed", Bcl6bNT_da_results$cl_3)
+Zfp711NT_da_results$cl_3_mx <- 
+  ifelse(Zfp711NT_da_results$cl_3_fraction < 0.5, "Mixed", Zfp711NT_da_results$cl_3)
+
+lv_early_p <- c(lv_early, "Mixed")
+Atf3NT_da_results$cl_3_mx_lv <- factor(Atf3NT_da_results$cl_3_mx, levels = lv_early_p)
+Bcl6bNT_da_results$cl_3_mx_lv <- factor(Bcl6bNT_da_results$cl_3_mx, levels = lv_early_p)
+Zfp711NT_da_results$cl_3_mx_lv <- factor(Zfp711NT_da_results$cl_3_mx, levels = lv_early_p)
+
+Atf3NT_da_results$cl_3_mx_lv2 <- droplevels(Atf3NT_da_results$cl_3_mx_lv)
+Bcl6bNT_da_results$cl_3_mx_lv2 <- droplevels(Bcl6bNT_da_results$cl_3_mx_lv)
+Zfp711NT_da_results$cl_3_mx_lv2 <- droplevels(Zfp711NT_da_results$cl_3_mx_lv)
+
+# Final visualization with reduced dimensions, neighborhood graphs, and beeswarm plots
+plot_grid(
+  plotReducedDim(Atf3NT_milo, dimred = "UMAPEARLY", colour_by = "cl_3",
+                 text_size = 4, text_colour = 'black') +
+    theme(legend.text = element_text(angle = 0, size = 15),
+          legend.title = element_text(size = 0, hjust = 0.5, vjust = 1, face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) +
+    theme(legend.direction = "vertical", legend.position = "left"),
+  plotNhoodGraphDA(Atf3NT_milo, Atf3NT_da_results, layout = "UMAPEARLY", alpha = 0.5),
+  plotDAbeeswarm(Atf3NT_da_results, group.by = "cl_3_mx_lv2", alpha = 1) + xlab("") +
+    theme(axis.title.x = element_text(angle = 0, size = 12), 
+          axis.text.y = element_text(angle = 0, size = 15)),
+  ncol = 3, rel_widths = c(1.1, 1.1, 1)
+)
+
+```
+
+
+
+## Heamtopoietic
+
+```{r eval=FALSE}
+# Load the required RDS files for the hemato subgroup data for each condition
+hemato_ControlAtf3 <- readRDS("~/cmo_chapter/introduction/rds/Hemato/hemato_CA.RDS")
+hemato_ControlBcl6b <- readRDS("~/cmo_chapter/introduction/rds/Hemato/hemato_BA.RDS")
+hemato_ControlZfp711 <- readRDS("~/cmo_chapter/introduction/rds/Hemato/hemato_ZA.RDS")
+
+# Display tables of sample levels and CellRanger assignments for each condition
+table(hemato_ControlAtf3$Samples_lv, hemato_ControlAtf3$CellRanger_Assignment)
+table(hemato_ControlBcl6b$Samples_lv, hemato_ControlBcl6b$CellRanger_Assignment)
+table(hemato_ControlZfp711$Samples_lv, hemato_ControlZfp711$CellRanger_Assignment)
+
+# Convert the data to SingleCellExperiment objects and add PCA embeddings
+sceAtf3NT <- as.SingleCellExperiment(hemato_ControlAtf3)
+reducedDim(sceAtf3NT, "PCA") <- hemato_ControlAtf3@reductions$pcahema@cell.embeddings
+Atf3NT_milo <- Milo(sceAtf3NT)
+Atf3NT_milo
+
+sceBcl6bNT <- as.SingleCellExperiment(hemato_ControlBcl6b)
+reducedDim(sceBcl6bNT, "PCA") <- hemato_ControlBcl6b@reductions$pcahema@cell.embeddings
+Bcl6bNT_milo <- Milo(sceBcl6bNT)
+Bcl6bNT_milo
+
+sceZfp711NT <- as.SingleCellExperiment(hemato_ControlZfp711)
+reducedDim(sceZfp711NT, "PCA") <- hemato_ControlZfp711@reductions$pcahema@cell.embeddings
+Zfp711NT_milo <- Milo(sceZfp711NT)
+Zfp711NT_milo
+
+# Build neighborhood graphs for each condition
+Atf3NT_milo <- buildGraph(Atf3NT_milo, k = 35, d = 50)
+Bcl6bNT_milo <- buildGraph(Bcl6bNT_milo, k = 35, d = 50)
+Zfp711NT_milo <- buildGraph(Zfp711NT_milo, k = 35, d = 50)
+
+# Create neighborhoods with refinement
+Atf3NT_milo <- makeNhoods(Atf3NT_milo, prop = 0.3, k = 35, d = 50, refined = TRUE)
+Bcl6bNT_milo <- makeNhoods(Bcl6bNT_milo, prop = 0.3, k = 35, d = 50, refined = TRUE)
+Zfp711NT_milo <- makeNhoods(Zfp711NT_milo, prop = 0.3, k = 35, d = 50, refined = TRUE)
+
+# Plot neighborhood size histograms for each condition
+plot_grid(
+  plotNhoodSizeHist(Atf3NT_milo) + scale_x_continuous(breaks = seq(0, 300, 25)) +
+    ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black",
+                                                                     hjust = 0.5, size = 20,
+                                                                    face = "bold.italic")),
+  plotNhoodSizeHist(Bcl6bNT_milo) + scale_x_continuous(breaks = seq(0, 300, 25)) +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                      hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  plotNhoodSizeHist(Zfp711NT_milo) + scale_x_continuous(breaks = seq(0, 300, 25)) +
+    ggtitle("Zfp711-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                       hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ncol = 3
+)
+
+# Convert sample IDs to character type
+Atf3NT_milo@colData@listData[["Samples"]] <- as.character(Atf3NT_milo@colData@listData$Samples_lv)
+Bcl6bNT_milo@colData@listData[["Samples"]] <- as.character(Bcl6bNT_milo@colData@listData$Samples_lv)
+Zfp711NT_milo@colData@listData[["Samples"]] <- as.character(Zfp711NT_milo@colData@listData$Samples_lv)
+
+# Count cells in each neighborhood
+Atf3NT_milo <- countCells(Atf3NT_milo, meta.data = data.frame(colData(Atf3NT_milo)),
+                          samples = "Samples")
+Bcl6bNT_milo <- countCells(Bcl6bNT_milo, meta.data = data.frame(colData(Bcl6bNT_milo)), 
+                           samples = "Samples")
+Zfp711NT_milo <- countCells(Zfp711NT_milo, meta.data = data.frame(colData(Zfp711NT_milo)), 
+                            samples = "Samples")
+
+# Create experimental design data frames for each condition
+Atf3NT_design <- data.frame(colData(Atf3NT_milo))[, c("Samples", "Conditions")]
+Atf3NT_design <- distinct(Atf3NT_design)
+rownames(Atf3NT_design) <- Atf3NT_design$Samples
+Atf3NT_design
+
+Atf3NT_design$Conditions <- factor(Atf3NT_design$Conditions, levels = c("Control", "Atf3KO"))
+
+Bcl6bNT_design <- data.frame(colData(Bcl6bNT_milo))[, c("Samples", "Conditions")]
+Bcl6bNT_design <- distinct(Bcl6bNT_design)
+rownames(Bcl6bNT_design) <- Bcl6bNT_design$Samples
+
+Zfp711NT_design <- data.frame(colData(Zfp711NT_milo))[, c("Samples", "Conditions")]
+Zfp711NT_design <- distinct(Zfp711NT_design)
+rownames(Zfp711NT_design) <- Zfp711NT_design$Samples
+
+# Calculate neighborhood distances
+Atf3NT_milo <- calcNhoodDistance(Atf3NT_milo, d = 50)
+Bcl6bNT_milo <- calcNhoodDistance(Bcl6bNT_milo, d = 50)
+Zfp711NT_milo <- calcNhoodDistance(Zfp711NT_milo, d = 50)
+
+# Perform differential abundance tests
+Atf3NT_da_results <- testNhoods(Atf3NT_milo, design = ~ Conditions, design.df = Atf3NT_design)
+Bcl6bNT_da_results <- testNhoods(Bcl6bNT_milo, design = ~ Conditions, design.df = Bcl6bNT_design)
+Zfp711NT_da_results <- testNhoods(Zfp711NT_milo, design = ~ Conditions, design.df = Zfp711NT_design)
+
+# Display top DA results based on Spatial FDR
+Atf3NT_da_results %>% arrange(-SpatialFDR) %>% head()
+Bcl6bNT_da_results %>% arrange(-SpatialFDR) %>% head()
+Zfp711NT_da_results %>% arrange(-SpatialFDR) %>% head()
+
+# Plot histograms of p-values
+plot_grid(
+  ggplot(Atf3NT_da_results, aes(PValue)) + geom_histogram(bins = 100) + theme_classic() +
+    ggtitle("Atf3-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20,
+                                                                    face = "bold.italic")),
+  ggplot(Bcl6bNT_da_results, aes(PValue)) + geom_histogram(bins = 100) + theme_classic() +
+    ggtitle("Bcl6b-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ggplot(Zfp711NT_da_results, aes(PValue)) + geom_histogram(bins = 100) + theme_classic() +
+    ggtitle("Zfp711-KO and Control") + 
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ncol = 3
+)
+
+# Plot PValue vs SpatialFDR for each condition
+plot_grid(
+  ggplot(Atf3NT_da_results, aes(PValue, SpatialFDR)) + geom_point() + theme_classic() +
+    ggtitle("Atf3-KO and Control") + 
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20,
+                                                                    face = "bold.italic")),
+  ggplot(Bcl6bNT_da_results, aes(PValue, SpatialFDR)) + geom_point() + theme_classic() +
+    ggtitle("Bcl6b-KO and Control") + 
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ggplot(Zfp711NT_da_results, aes(PValue, SpatialFDR)) + geom_point() + theme_classic() +
+    ggtitle("Zfp711-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ncol = 3
+)
+
+# Plot logFC vs -log10(SpatialFDR) for each condition
+plot_grid(
+  ggplot(Atf3NT_da_results, aes(logFC, -log10(SpatialFDR))) + geom_point() +
+    geom_hline(yintercept = 1) +
+    theme_classic() + ggtitle("Atf3-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5,
+                                                size = 20, face = "bold.italic")),
+  ggplot(Bcl6bNT_da_results, aes(logFC, -log10(SpatialFDR))) + 
+    geom_point() + geom_hline(yintercept = 1) +
+    theme_classic() + ggtitle("Bcl6b-KO and Control") + 
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20, face = "bold.italic")),
+  ggplot(Zfp711NT_da_results, aes(logFC, -log10(SpatialFDR))) + geom_point() +
+    geom_hline(yintercept = 1) +
+    theme_classic() + ggtitle("Zfp711-KO and Control") + 
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20, face = "bold.italic")),
+  ncol = 3
+)
+
+# Plot neighborhood MA plots for each condition
+plot_grid(
+  plotNhoodMA(Atf3NT_da_results) + theme_classic() + ggtitle("Atf3-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20, face = "bold.italic")),
+  plotNhoodMA(Bcl6bNT_da_results) + theme_classic() + ggtitle("Bcl6b-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20, face = "bold.italic")),
+  plotNhoodMA(Zfp711NT_da_results) + theme_classic() + ggtitle("Zfp711-KO and Control") +
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20, face = "bold.italic")),
+  ncol = 3
+)
+
+# Build neighborhood graphs for visualization
+Atf3NT_milo <- buildNhoodGraph(Atf3NT_milo)
+Bcl6bNT_milo <- buildNhoodGraph(Bcl6bNT_milo)
+Zfp711NT_milo <- buildNhoodGraph(Zfp711NT_milo)
+
+# Plot neighborhood graphs with DA results for each condition
+plot_grid(
+  plotNhoodGraphDA(Atf3NT_milo, Atf3NT_da_results, layout = "UMAPHEMA", alpha = 0.1) +
+    ggtitle("Atf3-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                     size = 20,
+                                                                    face = "bold.italic")),
+  plotNhoodGraphDA(Bcl6bNT_milo, Bcl6bNT_da_results, layout = "UMAPHEMA", alpha = 0.1) +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5,
+                                                                      size = 20,
+                                                                      face = "bold.italic")),
+  plotNhoodGraphDA(Zfp711NT_milo, Zfp711NT_da_results, layout = "UMAPHEMA", alpha = 0.1) +
+    ggtitle("Zfp711-KO and Control") + theme(plot.title = element_text(color = "black", hjust = 0.5, 
+                                                                       size = 20,
+                                                                      face = "bold.italic")),
+  ncol = 3
+)
+
+# Plot reduced dimensions and neighborhood graphs for each condition
+plot_grid(
+  plotReducedDim(Bcl6bNT_milo, dimred = "UMAPHEMA", colour_by = "cl_3", text_size = 4,
+                 text_colour = 'black') +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                      hjust = 0.5, size = 20,
+                                                                    face = "bold.italic")) +
+    theme(legend.text = element_text(angle = 0, size = 15), 
+          legend.title = element_text(size = 0,  hjust = 0.5, vjust = 1, face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) +
+    theme(legend.direction = "vertical", legend.position = "left"),
+  plotNhoodGraphDA(Bcl6bNT_milo, Bcl6bNT_da_results, layout = "UMAPHEMA", alpha = 0.5) +
+    ggtitle("Bcl6b-KO and Control") + theme(plot.title = element_text(color = "black", 
+                                                                      hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ncol = 2
+)
+
+plot_grid(
+  plotReducedDim(Zfp711NT_milo, dimred = "UMAPHEMA", colour_by = "cl_3",
+                 text_size = 4, text_colour = 'black') +
+    ggtitle("Zfp711-KO and Control") + 
+    theme(plot.title = element_text(color = "black", hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")) +
+    theme(legend.text = element_text(angle = 0, size = 15), 
+          legend.title = element_text(size = 0, hjust = 0.5, vjust = 1,  face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) + 
+    theme(legend.direction = "vertical",egend.position = "left"),
+  plotNhoodGraphDA(Zfp711NT_milo, Zfp711NT_da_results, layout = "UMAPHEMA", alpha = 0.5) +
+    ggtitle("Zfp711-KO and Control") + theme(plot.title = 
+                                               element_text(color = "black", hjust = 0.5, size = 20,
+                                                                      face = "bold.italic")),
+  ncol = 2
+)
+
+# Annotate neighborhoods based on cluster identity and calculate mixed clusters
+Atf3NT_da_results <- annotateNhoods(Atf3NT_milo, Atf3NT_da_results, coldata_col = "cl_3")
+lv_hemato <- levels(hemato_ControlAtf3$cl_3)
+Atf3NT_da_results$cl_3_lv <- factor(Atf3NT_da_results$cl_3, levels = lv_hemato)
+
+Bcl6bNT_da_results <- annotateNhoods(Bcl6bNT_milo, Bcl6bNT_da_results, coldata_col = "cl_3")
+Bcl6bNT_da_results$cl_3_lv <- factor(Bcl6bNT_da_results$cl_3, levels = lv_hemato)
+
+Zfp711NT_da_results <- annotateNhoods(Zfp711NT_milo, Zfp711NT_da_results, coldata_col = "cl_3")
+Zfp711NT_da_results$cl_3_lv <- factor(Zfp711NT_da_results$cl_3, levels = lv_hemato)
+
+Atf3NT_da_results$cl_3_mx <- ifelse(Atf3NT_da_results$cl_3_fraction < 0.5, "Mixed",
+                                    Atf3NT_da_results$cl_3)
+Bcl6bNT_da_results$cl_3_mx <- ifelse(Bcl6bNT_da_results$cl_3_fraction < 0.5, "Mixed",
+                                     Bcl6bNT_da_results$cl_3)
+Zfp711NT_da_results$cl_3_mx <- ifelse(Zfp711NT_da_results$cl_3_fraction < 0.5, "Mixed", 
+                                      Zfp711NT_da_results$cl_3)
+
+lv_hemato_p <- c(lv_hemato, "Mixed")
+Atf3NT_da_results$cl_3_mx_lv <- factor(Atf3NT_da_results$cl_3_mx, levels = lv_hemato_p)
+Bcl6bNT_da_results$cl_3_mx_lv <- factor(Bcl6bNT_da_results$cl_3_mx, levels = lv_hemato_p)
+Zfp711NT_da_results$cl_3_mx_lv <- factor(Zfp711NT_da_results$cl_3_mx, levels = lv_hemato_p)
+
+Atf3NT_da_results$cl_3_mx_lv2 <- droplevels(Atf3NT_da_results$cl_3_mx_lv)
+Bcl6bNT_da_results$cl_3_mx_lv2 <- droplevels(Bcl6bNT_da_results$cl_3_mx_lv)
+Zfp711NT_da_results$cl_3_mx_lv2 <- droplevels(Zfp711NT_da_results$cl_3_mx_lv)
+
+Atf3NT_da_results$cl_3_lv <- droplevels(Atf3NT_da_results$cl_3_lv)
+Bcl6bNT_da_results$cl_3_lv <- droplevels(Bcl6bNT_da_results$cl_3_lv)
+Zfp711NT_da_results$cl_3_lv <- droplevels(Zfp711NT_da_results$cl_3_lv)
+
+# Final visualization with reduced dimensions, neighborhood graphs, and beeswarm plots
+plot_grid(
+  plotReducedDim(Atf3NT_milo, dimred = "UMAPHEMA", colour_by = "cl_3", text_by = "cl_3",
+                 text_size = 6, text_colour = 'black') +
+    theme(legend.text = element_text(angle = 0, size = 15), legend.title = 
+            element_text(size = 0, hjust = 0.5, vjust = 1,face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) + 
+    theme(legend.direction = "vertical", legend.position = "left"),
+  plotNhoodGraphDA(Atf3NT_milo, Atf3NT_da_results, layout = "UMAPHEMA", alpha = 0.1),
+  plotDAbeeswarm(Atf3NT_da_results, group.by = "cl_3_mx_lv2", alpha = 1) + xlab("") +
+    theme(axis.title.x = element_text(angle = 0, size = 12), axis.text.y = 
+            element_text(angle = 0, size = 15)),
+  ncol = 3, rel_widths = c(1.1, 1.1, 1)
+)
+
+plot_grid(
+  plotReducedDim(Bcl6bNT_milo, dimred = "UMAPHEMA", colour_by = "cl_3", text_by = "cl_3",
+                 text_size = 6, text_colour = 'black') +
+    theme(legend.text = element_text(angle = 0, size = 15), legend.title = 
+            element_text(size = 0, hjust = 0.5, vjust = 1, face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) + 
+    theme(legend.direction = "vertical",legend.position = "left"),
+  plotNhoodGraphDA(Bcl6bNT_milo, Atf3NT_da_results, layout = "UMAPHEMA", alpha = 0.1),
+  plotDAbeeswarm(Bcl6bNT_da_results, group.by = "cl_3_mx_lv2", alpha = 1) + xlab("") +
+    theme(axis.title.x = element_text(angle = 0, size = 12), axis.text.y = 
+            element_text(angle = 0, size = 15)),
+  ncol = 3, rel_widths = c(1.1, 1.1, 1)
+)
+
+plot_grid(
+  plotReducedDim(Zfp711NT_milo, dimred = "UMAPHEMA", colour_by = "cl_3", text_by = "cl_3",
+                 text_size = 6, text_colour = 'black') +
+    theme(legend.text = element_text(angle = 0, size = 15), legend.title = 
+            element_text(size = 0, hjust = 0.5, vjust = 1, face = 'bold')) +
+    guides(color = guide_legend(override.aes = list(size = 7), ncol = 1)) + 
+    theme(legend.direction = "vertical",  legend.position = "left"),
+  plotNhoodGraphDA(Zfp711NT_milo, Atf3NT_da_results, layout = "UMAPHEMA", alpha = 0.1),
+  plotDAbeeswarm(Zfp711NT_da_results, group.by = "cl_3_mx_lv2", alpha = 1) + xlab("") +
+    theme(axis.title.x = element_text(angle = 0, size = 12), axis.text.y = 
+            element_text(angle = 0, size = 15)),
+  ncol = 3, rel_widths = c(1.1, 1.1, 1)
+)
+
+```
+
+
+
+## LateMesoderm
+
+```{r eval=FALSE}
+mesoderm_ControlAtf3 <- readRDS("~/cmo_chapter/introduction/rds/Mesoderm/mesoderm_CA.RDS")
+mesoderm_ControlBcl6b <- readRDS("~/cmo_chapter/introduction/rds/Mesoderm/mesoderm_BA.RDS")
+mesoderm_ControlZfp711 <- readRDS("~/cmo_chapter/introduction/rds/Mesoderm/mesoderm_ZA.RDS")
+
+sceAtf3NT <- as.SingleCellExperiment(mesoderm_ControlAtf3)
+reducedDim(sceAtf3NT, "PCA") <-mesoderm_ControlAtf3@reductions$pcamesoderm@cell.embeddings
+Atf3NT_milo <- Milo(sceAtf3NT)
+
+sceBcl6bNT <- as.SingleCellExperiment(mesoderm_ControlBcl6b)
+reducedDim(sceBcl6bNT, "PCA") <- mesoderm_ControlBcl6b@reductions$pcamesoderm@cell.embeddings
+Bcl6bNT_milo <- Milo(sceBcl6bNT)
+
+sceZfp711NT <- as.SingleCellExperiment(mesoderm_ControlZfp711)
+reducedDim(sceZfp711NT, "PCA") <- mesoderm_ControlZfp711@reductions$pcamesoderm@cell.embeddings
+Zfp711NT_milo <- Milo(sceZfp711NT)
+
+Atf3NT_milo <- buildGraph(Atf3NT_milo, k = 35, d = 50)
+Bcl6bNT_milo <- buildGraph(Bcl6bNT_milo, k = 35, d = 50)
+Zfp711NT_milo <- buildGraph(Zfp711NT_milo, k = 35, d = 50)
+
+Atf3NT_milo   <- makeNhoods(Atf3NT_milo, prop = 0.3, k = 35, d=50, refined = TRUE)
+Bcl6bNT_milo  <- makeNhoods(Bcl6bNT_milo, prop = 0.3, k = 35, d=50, refined = TRUE)
+Zfp711NT_milo <- makeNhoods(Zfp711NT_milo, prop = 0.3, k = 35, d=50, refined = TRUE)
+
+plot_grid(
+	plotNhoodSizeHist(Atf3NT_milo) + scale_x_continuous(breaks = seq(0, 300, 25))+
+	  ggtitle("Atf3-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	plotNhoodSizeHist(Bcl6bNT_milo)+ scale_x_continuous(breaks = seq(0, 300, 25))+
+	  ggtitle("Bcl6b-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	plotNhoodSizeHist(Zfp711NT_milo)+ scale_x_continuous(breaks = seq(0, 300, 25))+
+	  ggtitle("Zfp711-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=3
+)
+
+Atf3NT_milo@colData@listData[["Samples"]] <- as.character(Atf3NT_milo@colData@listData$Samples_lv)
+Bcl6bNT_milo@colData@listData[["Samples"]] <- as.character(Bcl6bNT_milo@colData@listData$Samples_lv)
+Zfp711NT_milo@colData@listData[["Samples"]] <- as.character(Zfp711NT_milo@colData@listData$Samples_lv)
+
+Atf3NT_milo <- countCells(Atf3NT_milo, meta.data = data.frame(colData(Atf3NT_milo)),
+                          samples="Samples")
+Bcl6bNT_milo <- countCells(Bcl6bNT_milo, meta.data = data.frame(colData(Bcl6bNT_milo)), 
+                           samples="Samples")
+Zfp711NT_milo <- countCells(Zfp711NT_milo, meta.data = data.frame(colData(Zfp711NT_milo)),
+                            samples="Samples")
+
+Atf3NT_design <- data.frame(colData(Atf3NT_milo))[,c("Samples", "Conditions")]
+Atf3NT_design <- distinct(Atf3NT_design)
+rownames(Atf3NT_design) <- Atf3NT_design$Samples
+
+Atf3NT_design$Conditions <- factor(Atf3NT_design$Conditions, levels = c("Control", "Atf3KO"))
+
+Bcl6bNT_design <- data.frame(colData(Bcl6bNT_milo))[,c("Samples", "Conditions")]
+Bcl6bNT_design <- distinct(Bcl6bNT_design)
+rownames(Bcl6bNT_design) <- Bcl6bNT_design$Samples
+
+
+Zfp711NT_design <- data.frame(colData(Zfp711NT_milo))[,c("Samples", "Conditions")]
+Zfp711NT_design <- distinct(Zfp711NT_design)
+rownames(Zfp711NT_design) <- Zfp711NT_design$Samples
+
+Atf3NT_milo <- calcNhoodDistance(Atf3NT_milo, d=50)
+Bcl6bNT_milo <- calcNhoodDistance(Bcl6bNT_milo, d=50)
+Zfp711NT_milo <- calcNhoodDistance(Zfp711NT_milo, d=50)
+
+Atf3NT_da_results <- testNhoods(Atf3NT_milo, design = ~ Conditions, design.df = Atf3NT_design)
+Bcl6bNT_da_results <- testNhoods(Bcl6bNT_milo, design = ~ Conditions, design.df = Bcl6bNT_design)
+Zfp711NT_da_results <- testNhoods(Zfp711NT_milo, design = ~ Conditions, design.df = Zfp711NT_design)
+
+
+Atf3NT_da_results %>%
+	arrange(- SpatialFDR) %>%
+	head()
+
+Bcl6bNT_da_results %>%
+	arrange(- SpatialFDR) %>%
+	head()
+
+Zfp711NT_da_results %>%
+	arrange(- SpatialFDR) %>%
+	head()
+
+plot_grid(
+	ggplot(Atf3NT_da_results, aes(PValue)) + geom_histogram(bins=100) + theme_classic()+
+	  ggtitle("Atf3-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	ggplot(Bcl6bNT_da_results, aes(PValue)) + geom_histogram(bins=100) + theme_classic()+
+	  ggtitle("Bcl6b-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	ggplot(Zfp711NT_da_results, aes(PValue)) + geom_histogram(bins=100) + theme_classic()+
+	  ggtitle("Zfp711-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=3
+)
+
+plot_grid(
+	ggplot(Atf3NT_da_results, aes(PValue, SpatialFDR)) + 
+		geom_point() + theme_classic()+ggtitle("Atf3-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	ggplot(Bcl6bNT_da_results, aes(PValue, SpatialFDR)) + 
+		geom_point() + theme_classic()+ggtitle("Bcl6b-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	ggplot(Zfp711NT_da_results, aes(PValue, SpatialFDR)) + 
+		geom_point() + theme_classic()+ggtitle("Zfp711-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=3
+)
+
+plot_grid(
+	ggplot(Atf3NT_da_results, aes(logFC, -log10(SpatialFDR))) + 
+		geom_point() +
+		geom_hline(yintercept = 1)+ theme_classic()+ggtitle("Atf3-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	ggplot(Bcl6bNT_da_results, aes(logFC, -log10(SpatialFDR))) + 
+		geom_point() +
+		geom_hline(yintercept = 1)+ theme_classic()+ggtitle("Bcl6b-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	ggplot(Zfp711NT_da_results, aes(logFC, -log10(SpatialFDR))) + 
+		geom_point() +
+		geom_hline(yintercept = 1)+ theme_classic()+ggtitle("Zfp711-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=3
+)
+
+plot_grid(
+	plotNhoodMA(Atf3NT_da_results) + theme_classic()+ggtitle("Atf3-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	plotNhoodMA(Bcl6bNT_da_results) + theme_classic()+ggtitle("Bcl6b-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	
+	plotNhoodMA(Zfp711NT_da_results) + theme_classic()+ggtitle("Zfp711-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=3
+)
+
+Atf3NT_milo <- buildNhoodGraph(Atf3NT_milo)
+Bcl6bNT_milo <- buildNhoodGraph(Bcl6bNT_milo)
+Zfp711NT_milo <- buildNhoodGraph(Zfp711NT_milo)
+
+plot_grid(
+	plotReducedDim(Atf3NT_milo, dimred = "UMAPMESODERM",  colour_by="cl_3", text_size = 4,
+	               text_colour = 'black')+ggtitle("Atf3-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic"))+
+	  theme(legend.text = element_text(angle = 0,size = 15),
+	        legend.title = element_text(size = 0,hjust=0.5,vjust = 1, face = 'bold'))+ 
+	  guides(color = guide_legend(override.aes = list(size = 7),ncol = 1))+
+	  theme(legend.direction ="vertical",legend.position = "left"),
+	plotNhoodGraphDA(Atf3NT_milo, Atf3NT_da_results, layout="UMAPMESODERM",alpha=0.5) +
+	  ggtitle("Atf3-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=2
+)
+
+plot_grid(
+	plotReducedDim(Bcl6bNT_milo, dimred = "UMAPMESODERM", 
+	               colour_by="cl_3", text_size = 4,text_colour = 'black')+
+	  ggtitle("Bcl6b-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic"))+
+	  theme(legend.text = element_text(angle = 0,size = 15),
+	        legend.title = element_text(size = 0, hjust=0.5,vjust = 1, face = 'bold'))+ 
+	  guides(color = guide_legend(override.aes = list(size = 7),ncol = 1))+
+	  theme(legend.direction ="vertical",legend.position = "left"),
+	plotNhoodGraphDA(Bcl6bNT_milo, Bcl6bNT_da_results, layout="UMAPMESODERM",alpha=0.5) +
+	  ggtitle("Bcl6b-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=2
+)
+
+plot_grid(
+	plotReducedDim(Zfp711NT_milo, dimred = "UMAPMESODERM",  colour_by="cl_3", text_size = 4,
+	               text_colour = 'black')+ggtitle("Zfp711-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic"))+
+	  theme(legend.text = element_text(angle = 0,size = 15),legend.title = 
+	          element_text(size = 0, hjust=0.5,vjust = 1, face = 'bold'))+ 
+	  guides(color = guide_legend(override.aes = list(size = 7),ncol = 1))+
+	  theme(legend.direction ="vertical",legend.position = "left"),
+	plotNhoodGraphDA(Zfp711NT_milo, Zfp711NT_da_results, layout="UMAPMESODERM",alpha=0.5) +
+	  ggtitle("Zfp711-KO and Control") +
+		theme(plot.title = element_text(color="black", hjust = 0.5,size=20, face="bold.italic")),
+	ncol=2
+)
+
+Atf3NT_da_results <- annotateNhoods(Atf3NT_milo, Atf3NT_da_results, coldata_col = "cl_3")
+
+lv_mesoderm <- levels(mesoderm_ControlAtf3$cl_3)
+
+Atf3NT_da_results$cl_3_lv <- factor(Atf3NT_da_results$cl_3, levels =lv_mesoderm) 
+
+Bcl6bNT_da_results <- annotateNhoods(Bcl6bNT_milo, Bcl6bNT_da_results, coldata_col = "cl_3")
+
+Bcl6bNT_da_results$cl_3_lv <- factor(Bcl6bNT_da_results$cl_3, levels =lv_mesoderm) 
+Zfp711NT_da_results <- annotateNhoods(Zfp711NT_milo, Zfp711NT_da_results, coldata_col = "cl_3")
+Zfp711NT_da_results$cl_3_lv <- factor(Zfp711NT_da_results$cl_3, levels =lv_mesoderm) 
+
+Atf3NT_da_results$cl_3_mx <- ifelse(Atf3NT_da_results$cl_3_fraction < 0.5, "Mixed", 
+                                    Atf3NT_da_results$cl_3)
+
+Bcl6bNT_da_results$cl_3_mx <- ifelse(Bcl6bNT_da_results$cl_3_fraction < 0.5, "Mixed",
+                                     Bcl6bNT_da_results$cl_3)
+
+Zfp711NT_da_results$cl_3_mx <- ifelse(Zfp711NT_da_results$cl_3_fraction < 0.5, "Mixed", 
+                                      Zfp711NT_da_results$cl_3)
+
+
+lv_mesoderm
+lv_mesoderm_p <- c(lv_mesoderm, "Mixed")
+lv_mesoderm_p 
+
+Atf3NT_da_results$cl_3_mx_lv <- factor(Atf3NT_da_results$cl_3_mx, levels =lv_mesoderm_p) 
+Bcl6bNT_da_results$cl_3_mx_lv <- factor(Bcl6bNT_da_results$cl_3_mx, levels =lv_mesoderm_p) 
+Zfp711NT_da_results$cl_3_mx_lv <- factor(Zfp711NT_da_results$cl_3_mx, levels =lv_mesoderm_p) 
+
+Atf3NT_da_results$cl_3_mx_lv2 <- droplevels(Atf3NT_da_results$cl_3_mx_lv)
+Bcl6bNT_da_results$cl_3_mx_lv2 <- droplevels(Bcl6bNT_da_results$cl_3_mx_lv)
+Zfp711NT_da_results$cl_3_mx_lv2 <- droplevels(Zfp711NT_da_results$cl_3_mx_lv)
+
+Zfp711NT_da_results$cl_3_lv <- droplevels(Zfp711NT_da_results$cl_3_lv)
+
+
+plot_grid(
+	plotReducedDim(Atf3NT_milo, dimred = "UMAPMESODERM",  colour_by="cl_3", text_by = "cl_3",
+	               text_size = 6,text_colour = 'black')+
+	  theme(legend.text = element_text(angle = 0,size = 15),legend.title = 
+	          element_text(size = 0, hjust=0.5,vjust = 1, face = 'bold'))+ 
+	  guides(color = guide_legend(override.aes = list(size = 7),ncol = 1))+
+	  theme(legend.direction ="vertical",legend.position = "left"),
+	
+	plotNhoodGraphDA(Atf3NT_milo, Atf3NT_da_results, layout="UMAPMESODERM",alpha=0.1) ,
+
+		plotDAbeeswarm(Atf3NT_da_results, group.by = "cl_3_mx_lv2",alpha = 1) +xlab("")+
+	  theme(axis.title.x = element_text(angle = 0,size = 12), axis.text.y =
+	          element_text(angle = 0,size = 15)),
+	ncol=3,rel_widths = c(1.1,1.1,1)
+)
+
+plot_grid(
+	plotReducedDim(Bcl6bNT_milo, dimred = "UMAPMESODERM",  colour_by="cl_3", text_by = "cl_3",
+	               text_size = 6,text_colour = 'black')+
+	  theme(legend.text = element_text(angle = 0,size = 15),legend.title =
+	          element_text(size = 0, hjust=0.5,vjust = 1, face = 'bold'))+
+	  guides(color = guide_legend(override.aes = list(size = 7),ncol = 1))+
+	  theme(legend.direction ="vertical",legend.position = "left"),
+	
+	plotNhoodGraphDA(Bcl6bNT_milo, Atf3NT_da_results, layout="UMAPMESODERM",alpha=0.1) ,
+
+	plotDAbeeswarm(Bcl6bNT_da_results, group.by = "cl_3_mx_lv2",alpha = 1) +xlab("")+
+	  theme(axis.title.x = element_text(angle = 0,size = 12), axis.text.y =
+	          element_text(angle = 0,size = 15)),
+	ncol=3,rel_widths = c(1.1,1.1,1)
+)
+
+plot_grid(
+	plotReducedDim(Zfp711NT_milo, dimred = "UMAPMESODERM",  colour_by="cl_3", text_by = "cl_3",
+	               text_size = 6,text_colour = 'black')+
+	  theme(legend.text = element_text(angle = 0,size = 15),legend.title =
+	          element_text(size = 0, hjust=0.5,vjust = 1, face = 'bold'))+ 
+	  guides(color = guide_legend(override.aes = list(size = 7),ncol = 1))+
+	  theme(legend.direction ="vertical",legend.position = "left"),
+	
+	plotNhoodGraphDA(Zfp711NT_milo, Atf3NT_da_results, layout="UMAPMESODERM",alpha=0.1) ,
+
+		plotDAbeeswarm(Zfp711NT_da_results, group.by = "cl_3_mx_lv2",alpha = 1) +xlab("")+
+	  theme(axis.title.x = element_text(angle = 0,size = 12), axis.text.y = 
+	          element_text(angle = 0,size = 15)),
+	ncol=3,rel_widths = c(1.1,1.1,1)
+)
+
+
+
+
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
