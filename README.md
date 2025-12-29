@@ -65,18 +65,19 @@ Additional notebooks in the repository include mapping/renaming steps and trajec
 
 3. Some scripts/notebooks assume local paths and/or large intermediate files (e.g., Cell Ranger outputs) that are not stored in GitHub. Update paths at the top of each notebook/script to match your system.
 
-How to cite
-Published article
+## How to cite
+
+### Published article
 
 Cetin R, Picco G, van Staalduinen J, Bindels E, Hoogenboezem R, van Beek G, Sanders MA, Fidan Y, Korkmaz A, Gribnau J, van Haren J, Huylebroeck D, Mulugeta E, Grosveld F.
 Distinct roles of Atf3, Zfp711 and Bcl6b in early embryonic hematopoietic and endothelial lineage specification. Development (2025) 152(23): dev204792. https://doi.org/10.1242/dev.204792
 
-Preprint
+### Preprint
 
 Cetin R, Picco G, van Staalduinen J, Bindels E, Hoogenboezem R, van Beek G, Sanders MA, Fidan Y, Korkmaz A, Gribnau J, van Haren J, Huylebroeck D, Mulugeta E, Grosveld F.
 Single-Cell Roadmap of Early Hemato-Endothelial Development: Functions of Atf3, Zfp711 and Bcl6b. bioRxiv (2025). https://doi.org/10.1101/2025.02.23.639715
 
-
+```{pgsql}
 Publication metadata (journal/volume/article ID/DOIs) verified against the journal page and PubMed record. :contentReference[oaicite:0]{index=0}  
 Preprint metadata (title/authors/DOI) verified via DOI-indexed record and the project website. :contentReference[oaicite:1]{index=1}  
 Data accession link verified via the BioStudies/ArrayExpress landing page. :contentReference[oaicite:2]{index=2}
