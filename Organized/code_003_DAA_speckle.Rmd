@@ -1,0 +1,1034 @@
+---
+title: "Differential Abundance Analysis with Speckle"
+author: "Ridvan Cetin"
+date: "`r Sys.Date()`"
+output: html_notebook
+---
+
+DISCLAMIR:
+I am summarizing my code here, so there might be typos or copy paste errors. This is more like a detailed index page.
+
+# ==============================================================================
+# SECTION 1: COLOR PALETTES FOR VISUALIZATION
+# ==============================================================================
+
+```{r eval=FALSE,}
+# ==============================================================================
+# Define Custom Color Palettes
+# ==============================================================================
+# r3dcol: A list containing multiple color palette options for differential
+# abundance visualization across conditions and cell types
+
+# Initialize empty list to store all color palettes
+r3dcol <- list()
+
+# cols_94: Large palette with 94 distinct colors
+# Useful for visualizing many subclusters or cell types
+r3dcol$cols_94 <- c(
+  "#F0E442","#1CE6FF","#FF34FF","#FF4A46","#008941","#006FA6","#A30059","#FFDBE5","#7A4900","#0089A3",
+  "#63FFAC","#B79762",
+  "#004D43","#8FB0FF","#997D87","#809693","#6A3A4C","#b4b701","#4FC601","#3B5DFF","#FF2F80","#61615A",
+  "#BA0900","#6B7900",
+  "#00C2A0","#FFAA92","#FF90C9","#B903AA","#D16100","#922329","#7B4F4B","#A1C299","#0AA6D8","#00846F",
+  "#FFB500","#C2FFED",
+  "#A079BF","#CC0744","#C0B9B2","#C2FF99","#00489C","#6F0062","#0CBD66","#EEC3FF","#456D75","#B77B68",
+  "#7A87A1","#788D66",
+  "#885578","#FAD09F","#FF8A9A","#D157A0","#BEC459","#456648","#0086ED","#886F4C","#34362D","#B4A8BD",
+  "#00A6AA","#452C2C",
+  "#636375","#A3C8C9","#FF913F","#938A81","#575329","#00FECF","#B05B6F","#8CD0FF","#3B9700","#04F757",
+  "#C8A1A1","#1E6E00",
+  "#7900D7","#A77500","#6367A9","#A05837","#6B002C","#772600","#D790FF","#9B9700","#549E79","#FFF69F",
+  "#201625","#72418F",
+  "#BC23FF","#99ADC0","#3A2465","#DDEFFF","#5B4534","#FDE8DC","#404E55","#CB7E98","#A4E804","#324E72"
+)
+
+# cols_46: Medium palette with 46 colors for moderate cluster numbers
+r3dcol$cols_46 <- c(
+  "#FFB500","#00C2A0","#D157A0","#8CD0FF","#FF4A46","#FDE8DC","#63FFAC","#B79762","#8FB0FF","#997D87",
+  "#809693","#b4b701",
+  "#4FC601","#FFAA92","#FF90C9","#A1C299","#F0E442","#C2FFED","#A079BF","#C0B9B2","#C2FF99","#EEC3FF",
+  "#B77B68","#7A87A1",
+  "#788D66","#FAD09F","#FF8A9A","#BEC459","#B4A8BD","#A3C8C9","#FF913F","#938A81","#00FECF","#FF34FF",
+  "#1CE6FF","#04F757",
+  "#C8A1A1","#D790FF","#9B9700","#549E79","#FFF69F","#99ADC0","#DDEFFF","#FFDBE5","#CB7E98","#A4E804"
+)
+
+# cols_pjsala: Palette inspired by Pijuan-Sala et al. mouse gastrulation atlas
+r3dcol$cols_pjsala <- c(
+  "#005579","#0F4A9C","#139992","#1A1A1A","#354E23","#3F84AA","#532C8A","#635547","#647a4f","#65A83E",
+  "#7F6874","#8870ad",
+  "#8DB5CE","#8EC792","#989898","#9e6762","#B51D8D","#c19f70","#C3C388","#C594BF","#C72228","#c9a997",
+  "#C9EBFB","#cc7818",
+  "#CDE088","#DABE99","#DFCDE4","#EF4E22","#EF5A9D","#F397C0","#F6BFCB","#f79083","#f7f79e","#f9decf",
+  "#FACB12","#FBBE92",
+  "#ff891c"
+)
+
+# cols_4x3: 12 colors arranged as 4 color families x 3 shades
+r3dcol$cols_4x3 <- c(
+  "#551153","#970098","#9c24cd","#412c00","#997600","#c6a000","#1e3604","#355e07","#4f890e","#002f64",
+  "#0050ae","#1077f3"
+)
+
+# cols_12x1: 12 distinct colors from ColorBrewer paired palette
+r3dcol$cols_12x1 <- c(
+  '#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a',
+  '#ffff99','#b15928'
+)
+
+# cols_4x3b: Alternative 12-color palette
+r3dcol$cols_4x3b <- c(
+  "#551153","#970098","#cc34cd","#c85b00","#f98517","#fdbf6f","#00603d","#008c5c","#33b983","#002f64",
+  "#0050ae","#1077f3"
+)
+
+# cols_4x1: 4 colors for condition comparisons (KO vs Control)
+r3dcol$cols_4x1 <- c(
+  "#970098","#997600","#4f890e","#0050ae"
+)
+
+# cols_4x1b: Alternative 4-color palette
+r3dcol$cols_4x1b <- c(
+  "#970098","#f98517","#008c5c","#1077f3"
+)
+
+# cols_3a: 3 colors for three-group comparisons
+r3dcol$cols_3a <- c(
+  "#D157A0","#FFB500","#00C2A0"
+)
+
+# cols_3b: Alternative 3-color palette
+r3dcol$cols_3b <- c(
+  "#D454B5","#c85b00","#008c5c"
+)
+```
+
+# ==============================================================================
+# SECTION 2: ENVIRONMENT SETUP AND PACKAGE LOADING
+# ==============================================================================
+
+```{r eval=FALSE}
+# ==============================================================================
+# Load Required Packages
+# ==============================================================================
+
+# Suppress startup messages for cleaner output
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)  # Bioconductor container for single-cell data
+  library(miloR)                 # Differential abundance with neighborhoods (alternative method)
+  library(dplyr)                 # Data manipulation
+  library(scater)                # Single-cell analysis utilities
+  library(speckle)               # Main package for differential abundance analysis
+  library(ggplot2)               # Visualization
+})
+```
+
+# Introduction
+
+Here we will summarize the steps of the Compositional Analysis / Differential Abundance Analysis between KO clones and
+NT-Control (NonTargetting Control). We will do it in two different analysis 1) cluster levels with *Speckle* and 2)
+k-nearstneighborhood with smaller groups of cells.
+
+# ==============================================================================
+# SECTION 3: DATA LOADING AND PREPARATION
+# ==============================================================================
+
+# Data Preprocessing
+
+## Loading Data
+
+
+```{r eval=FALSE}
+# ==============================================================================
+# Load Main Seurat Object and Create KO-Specific Subsets
+# ==============================================================================
+
+# Load the preprocessed Seurat object
+cmo <- readRDS("~/cmo_chapter/introduction/rds/cmoy2.RDS")
+
+# Set active identity to condition levels (KO vs Control)
+Idents(cmo) <- "Conditions_lv"
+
+# ==============================================================================
+# Create Condition-Specific Subsets for Pairwise Comparisons
+# ==============================================================================
+
+# subset(): Extract cells belonging to specific conditions
+# Each comparison is KO vs Control (not all conditions together)
+
+# Atf3 knockout vs Control comparison
+cmo_CA <- subset(cmo, idents = c("Control","Atf3KO"))
+
+# Bcl6b knockout vs Control comparison  
+cmo_BA <- subset(cmo, idents = c("Control","Bcl6bKO"))
+
+# Zfp711 knockout vs Control comparison
+cmo_ZA <- subset(cmo, idents = c("Control","Zfp711KO"))
+
+# ==============================================================================
+# Clean Factor Levels After Subsetting
+# ==============================================================================
+
+# After subsetting, factor columns retain all original levels (even unused ones)
+# This can cause issues with speckle/statistical tests
+# droplevels() removes unused factor levels
+
+# Define helper function to clean metadata factors
+clean_metadata <- function(seurat_obj) {
+  metadata <- seurat_obj@meta.data
+  # Apply droplevels to each factor column
+  # lapply: Apply function to each column
+  metadata[] <- lapply(metadata, function(column) {
+    if (is.factor(column)) {
+      return(droplevels(column))  # Remove unused levels
+    } else {
+      return(column)  # Keep non-factor columns unchanged
+    }
+  })
+  seurat_obj@meta.data <- metadata
+  return(seurat_obj)
+}
+
+# Apply cleaning to each subset
+cmo_CA <- clean_metadata(cmo_CA)
+cmo_BA <- clean_metadata(cmo_BA)
+cmo_ZA <- clean_metadata(cmo_ZA)
+```
+
+I will show only one condition (Atf3-KO versus NT-Control).
+We will first follow the classical "speckle" pipeline during the analysis. Later I will subset the samples to equal cell numbers and use the plotCellTypeProps function to compare KO and NT conditions at annotation level. 
+
+# ==============================================================================
+# SECTION 4: ATF3 KNOCKOUT ANALYSIS
+# ==============================================================================
+
+# Atf3
+
+## Loading the RDS file
+
+```{r}
+# ==============================================================================
+# Load Atf3 vs Control Subset
+# ==============================================================================
+
+# Load the pre-saved subset containing only Atf3KO and Control cells
+cmo_CA <- readRDS("../../../RDS/CMO/cmo_CA.RDS")
+```
+
+## just to be sure
+if you are subsetting the data and loosing some of the levels use droplevels() before running speckle and miloR
+e.g.
+
+```{r}
+# ==============================================================================
+# Ensure Clean Factor Levels
+# ==============================================================================
+
+# droplevels(): Critical step before DAA
+# Removes factor levels that have 0 cells after subsetting
+# Prevents errors in statistical modeling
+cmo_CA$Conditions_lv <- droplevels(cmo_CA$Conditions_lv)
+```
+
+# ==============================================================================
+# SECTION 5: EXTRACT ANNOTATION LEVEL FACTORS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Store Factor Levels for Consistent Ordering
+# ==============================================================================
+
+# levels(): Extract the ordered factor levels for each annotation
+# These are used to ensure consistent ordering in plots and results
+
+# cl_4: Subcluster + cell cycle combined annotation (finest resolution)
+c_ca_4 <- levels(cmo_CA$cl_4)
+
+# cl_3: Subcluster annotation (high resolution)
+c_ca_3 <- levels(cmo_CA$cl_3)
+
+# cl_2: Cluster annotation (medium resolution)
+c_ca_2 <- levels(cmo_CA$cl_2)
+
+# cl_1: Group annotation (coarsest resolution - e.g., Early, Mesoderm, Hematopoietic)
+c_ca_1 <- levels(cmo_CA$cl_1)
+
+# Phasel: Cell cycle phase annotation (G1, S, G2M)
+c_ca_cc <- levels(cmo_CA$Phasel)
+
+# Conditions_lv: Experimental conditions (Atf3KO, Control)
+c_ca_conditions <- levels(cmo_CA$Conditions_lv)
+
+# Samples_lv: Biological replicates within each condition
+c_ca_samples <- levels(cmo_CA$Samples_lv)
+```
+
+```{r}
+# ==============================================================================
+# Set Active Identity for Analysis
+# ==============================================================================
+
+# Set identity to subcluster level for downstream analysis
+Idents(cmo_CA) <- "cl_3"
+```
+
+# ==============================================================================
+# SECTION 6: PROPELLER DIFFERENTIAL ABUNDANCE TESTING
+# ==============================================================================
+
+# Propeller
+
+we will do DAA the test now in 5 levels (cl_1, ...) in both "asin" and "logit" tranformation. You can find the results in the supplementary table.
+
+
+### Asin&logit
+
+
+
+```{r}
+# ==============================================================================
+# Run Propeller DAA at All Annotation Levels
+# ==============================================================================
+
+# propeller(): Main function from speckle package for differential abundance
+# Statistical test for changes in cell type proportions between conditions
+
+# Parameters:
+# - clusters: Cell type/cluster assignments for each cell
+# - sample: Sample/replicate identifier for each cell
+# - group: Condition/group identifier (what we're comparing)
+# - transform: Variance stabilizing transformation ("asin" or "logit")
+
+# "asin": Arcsine square root transformation - better for proportions near 0 or 1
+# "logit": Logit transformation - log(p/(1-p)) - better for mid-range proportions
+
+# Initialize list to store all results
+prop_CA <- list()
+
+# --- Arcsine Transformation Results ---
+# S1a: Group level (coarsest)
+prop_CA$S1a <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "asin")
+
+# S2a: Cluster level
+prop_CA$S2a <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "asin")
+
+# S3a: Subcluster level
+prop_CA$S3a <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "asin")
+
+# S4a: Subcluster + cell cycle level (finest)
+prop_CA$S4a <- propeller(clusters = cmo_CA$cl_4, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "asin")
+
+# S5a: Cell cycle phase level
+prop_CA$S5a <- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "asin")
+
+# --- Logit Transformation Results ---
+# Same analyses with logit transformation for comparison
+prop_CA$S1l <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "logit")
+
+prop_CA$S2l <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "logit")
+
+prop_CA$S3l <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "logit")
+
+prop_CA$S4l <- propeller(clusters = cmo_CA$cl_4, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "logit")
+
+prop_CA$S5l <- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, 
+                         group = cmo_CA$Conditions_lv, transform = "logit")
+
+```
+
+# ==============================================================================
+# SECTION 7: PROPELLER RESULTS - INDIVIDUAL VARIABLES
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Run Propeller with Arcsine Transformation (Individual Storage)
+# ==============================================================================
+
+# Store results in individual variables for easier export
+# Arcsine transformation version
+
+# Group level (e.g., Early, Mesoderm, Hematopoietic)
+ca1_asin <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, 
+                      group = cmo_CA$Conditions_lv, transform = "asin")
+
+# Cluster level
+ca2_asin <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, 
+                      group = cmo_CA$Conditions_lv, transform = "asin")
+
+# Subcluster level
+ca3_asin <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, 
+                      group = cmo_CA$Conditions_lv, transform = "asin")
+
+# Cell cycle level
+cacc_asin <- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, 
+                       group = cmo_CA$Conditions_lv, transform = "asin")
+```
+
+```{r}
+# ==============================================================================
+# Run Propeller with Logit Transformation (Individual Storage)
+# ==============================================================================
+
+# Logit transformation version of the same analyses
+ca1_logit <- propeller(clusters = cmo_CA$cl_1, sample = cmo_CA$Samples_lv, 
+                       group = cmo_CA$Conditions_lv, transform = "logit")
+
+ca2_logit <- propeller(clusters = cmo_CA$cl_2, sample = cmo_CA$Samples_lv, 
+                       group = cmo_CA$Conditions_lv, transform = "logit")
+
+ca3_logit <- propeller(clusters = cmo_CA$cl_3, sample = cmo_CA$Samples_lv, 
+                       group = cmo_CA$Conditions_lv, transform = "logit")
+
+cacc_logit <- propeller(clusters = cmo_CA$Phasel, sample = cmo_CA$Samples_lv, 
+                        group = cmo_CA$Conditions_lv, transform = "logit")
+```
+
+# ==============================================================================
+# SECTION 8: EXPORT PROPELLER RESULTS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Export Arcsine Transformation Results
+# ==============================================================================
+
+# write.table(): Export results as tab-separated text files
+# sep = '\t': Tab delimiter
+# row.names = F: Don't include row numbers
+# col.names = T: Include column headers
+# quote = F: Don't quote strings
+
+write.table(ca1_asin, "./Atf3/Atf3_propeller_groups_asin.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca2_asin, "./Atf3/Atf3_propeller_clusters_asin.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca3_asin, "./Atf3/Atf3_propeller_subclusters_asin.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(cacc_asin, "./Atf3/Atf3_propeller_cellcycle_asin.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+```
+
+```{r}
+# ==============================================================================
+# Export Logit Transformation Results
+# ==============================================================================
+
+write.table(ca1_logit, "./Atf3/Atf3_propeller_groups_logit.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca2_logit, "./Atf3/Atf3_propeller_clusters_logit.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(ca3_logit, "./Atf3/Atf3_propeller_subclusters_logit.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(cacc_logit, "./Atf3/Atf3_propeller_cellcycle_logit.txt", 
+            sep = '\t', row.names = F, col.names = T, quote = F)
+```
+
+# ==============================================================================
+# SECTION 9: CELL TYPE PROPORTION VISUALIZATION - GROUP LEVEL
+# ==============================================================================
+
+```{r,fig.width=6.5, fig.height=5.5}
+# ==============================================================================
+# Stacked Bar Plot - Group Level Proportions
+# ==============================================================================
+
+# plotCellTypeProps(): From speckle, creates stacked bar plots of cell type proportions
+# clusters: Cell type assignments
+# sample: What to group bars by (here, conditions)
+
+plot_cell_type_normal_1 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_1, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  # scale_x_discrete(): Control x-axis order
+  scale_x_discrete(limits = c_ca_conditions) +
+  # scale_fill_manual(): Custom colors for groups
+  scale_fill_manual(
+    "Groups", 
+    values = c("#66c2a5","#fc8d62","#8da0cb"),
+    guide = guide_legend(ncol = 1)
+  ) + 
+  # geom_vline(): Add vertical lines to separate replicates
+  geom_vline(xintercept = c(3.5, 6.5, 9.5), linewidth = 0.2, color = "black")
+
+print(plot_cell_type_normal_1)
+```
+
+# ==============================================================================
+# SECTION 10: CELL TYPE PROPORTION VISUALIZATION - CLUSTER LEVEL
+# ==============================================================================
+
+```{r,fig.width=6.5, fig.height=5.5}
+# ==============================================================================
+# Stacked Bar Plot - Cluster Level Proportions
+# ==============================================================================
+
+plot_cell_type_normal_2 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_2, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_conditions) +
+  scale_fill_manual(
+    "Clusters (A-Z)", 
+    values = r3dcol$cols_46,
+    guide = guide_legend(ncol = 1)
+  ) + 
+  geom_vline(xintercept = c(3.5, 6.5, 9.5), linewidth = 0.2, color = "black")
+
+print(plot_cell_type_normal_2)
+```
+
+# ==============================================================================
+# SECTION 11: CELL TYPE PROPORTION VISUALIZATION - SUBCLUSTER LEVEL
+# ==============================================================================
+
+```{r,fig.width=6.5, fig.height=5.5}
+# ==============================================================================
+# Stacked Bar Plot - Subcluster Level Proportions
+# ==============================================================================
+
+plot_cell_type_normal_3 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_3, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_conditions) +
+  scale_fill_manual(
+    "Subclusters (A-Z)", 
+    values = r3dcol$cols_46,
+    guide = guide_legend(ncol = 2)  # Two columns for many subclusters
+  ) + 
+  geom_vline(xintercept = c(3.5, 6.5, 9.5), linewidth = 0.2, color = "black")
+
+print(plot_cell_type_normal_3)
+```
+
+# ==============================================================================
+# SECTION 12: CELL TYPE PROPORTION VISUALIZATION - FINEST RESOLUTION
+# ==============================================================================
+
+```{r,fig.width=14, fig.height=5.5}
+# ==============================================================================
+# Stacked Bar Plot - Subcluster + Cell Cycle Level
+# ==============================================================================
+
+# cl_4: Finest resolution combining subclusters with cell cycle phases
+plot_cell_type_normal_4 <-
+  plotCellTypeProps(clusters = cmo_CA$cl_4, sample = cmo_CA$Conditions_lv) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.text = element_text(size = 9, margin = margin(l=1)),
+    legend.title = element_text(size = 10, hjust = 0.5),
+    legend.position = "right",
+    legend.box.margin = margin(l=-10, unit = "pt")
+  ) + 
+  scale_x_discrete(limits = c_ca_conditions) +
+  # Combine two color palettes for the many categories
+  scale_fill_manual(
+    "subclusters-cc (A-Z)", 
+    values = c(r3dcol$cols_94, r3dcol$cols_46),
+    guide = guide_legend(ncol = 6)  # Six columns for very many categories
+  ) + 
+  geom_vline(xintercept = c(3.5, 6.5, 9.5), linewidth = 0.2, color = "black")
+
+print(plot_cell_type_normal_4)
+```
+
+# ==============================================================================
+# SECTION 13: MULTI-CONDITION COMPARISON SETUP
+# ==============================================================================
+
+# We will create one to one comparison plots
+
+Doing some naming adjustment, (Naive and PGC has same naming in clusters and subclusters)
+
+
+```{r}
+# ==============================================================================
+# Load Full Dataset for Multi-Condition Analysis
+# ==============================================================================
+
+# Load the complete Seurat object with all conditions
+cmo <- readRDS("~/PhD_Projects/CMO/cmoy2_reup.RDS")
+```
+
+```{r}
+# Display object summary
+cmo
+```
+
+```{r}
+# ==============================================================================
+# Extract and Examine Subcluster Levels
+# ==============================================================================
+
+# Get current subcluster level names
+levels(cmo$cl_3)
+lvx <- levels(cmo$cl_3)
+```
+
+```{r}
+# Set active identity to subclusters
+Idents(cmo) <- "cl_3"
+```
+
+
+```{r}
+# ==============================================================================
+# Rename Overlapping Cluster Names
+# ==============================================================================
+
+# Some clusters have the same name at different annotation levels
+# Rename to avoid confusion in merged results
+# "Naive" -> "Naiv" and "PGC" -> "PGCs" at subcluster level
+
+new.cluster.ids <- c("Naiv", lvx[2:6], "PGCs", lvx[-c(1:7)])
+new.cluster.ids
+
+```
+
+```{r}
+# ==============================================================================
+# Apply New Names to Identities
+# ==============================================================================
+
+# names(): Assign names to the ID vector (maps old -> new)
+names(new.cluster.ids) <- levels(cmo)
+
+# RenameIdents(): Apply the renaming to the Seurat object
+cmo <- RenameIdents(cmo, new.cluster.ids)
+```
+
+```{r}
+# Verify the renaming worked
+table(Idents(cmo))
+```
+
+```{r}
+# Store renamed identities back to metadata
+cmo$cl_3 <- Idents(cmo)
+```
+
+# ==============================================================================
+# SECTION 14: MULTI-CONDITION DAA ANALYSIS
+# ==============================================================================
+
+```{r}
+library(speckle)
+```
+
+```{r}
+# Initialize results list for all conditions
+daa <- list()
+```
+
+
+```{r}
+# ==============================================================================
+# Run Propeller DAA Across All Conditions Simultaneously
+# ==============================================================================
+
+# When group has >2 levels, propeller performs ANOVA-like test
+# Tests if any condition differs from others
+
+# --- Logit Transformation ---
+daa$cmo_groups_logit <- propeller(clusters = cmo$cl_1, sample = cmo$Samples_lv, 
+                                  group = cmo$Conditions_lv, transform = "logit")
+daa$cmo_clusters_logit <- propeller(clusters = cmo$cl_2, sample = cmo$Samples_lv, 
+                                    group = cmo$Conditions_lv, transform = "logit")
+daa$cmo_subclusters_logit <- propeller(clusters = cmo$cl_3, sample = cmo$Samples_lv, 
+                                       group = cmo$Conditions_lv, transform = "logit")
+daa$cmo_cellcycle_logit <- propeller(clusters = cmo$Phasel, sample = cmo$Samples_lv, 
+                                     group = cmo$Conditions_lv, transform = "logit")
+
+# --- Arcsine Transformation ---
+daa$cmo_groups_asin <- propeller(clusters = cmo$cl_1, sample = cmo$Samples_lv, 
+                                 group = cmo$Conditions_lv, transform = "asin")
+daa$cmo_clusters_asin <- propeller(clusters = cmo$cl_2, sample = cmo$Samples_lv, 
+                                   group = cmo$Conditions_lv, transform = "asin")
+daa$cmo_subclusters_asin <- propeller(clusters = cmo$cl_3, sample = cmo$Samples_lv, 
+                                      group = cmo$Conditions_lv, transform = "asin")
+daa$cmo_cellcycle_asin <- propeller(clusters = cmo$Phasel, sample = cmo$Samples_lv, 
+                                    group = cmo$Conditions_lv, transform = "asin")
+```
+
+```{r}
+# ==============================================================================
+# Display Results
+# ==============================================================================
+
+# View results for each annotation level
+daa$cmo_groups_logit
+daa$cmo_groups_asin
+daa$cmo_clusters_logit
+daa$cmo_clusters_asin
+daa$cmo_subclusters_logit
+daa$cmo_subclusters_asin
+```
+
+# ==============================================================================
+# SECTION 15: COMBINE RESULTS FROM ALL ANNOTATION LEVELS
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Store Level Orders for Consistent Visualization
+# ==============================================================================
+
+lv_subclusters <- levels(cmo$cl_3)  # Subcluster names
+lv_clusters <- levels(cmo$cl_2)      # Cluster names
+lv_groups <- levels(cmo$cl_1)        # Group names
+lv_cellcycle <- levels(cmo$Phasel)   # Cell cycle phases
+```
+
+## merging results of different levels to one 
+
+```{r}
+# ==============================================================================
+# Merge All Results into Single Data Frame
+# ==============================================================================
+
+# rbind(): Row-bind data frames from different annotation levels
+# Creates unified table for visualization
+daa$cmo_all <- rbind(daa$cmo_groups_logit, daa$cmo_clusters_logit, 
+                     daa$cmo_subclusters_logit, daa$cmo_cellcycle_logit)
+```
+
+```{r}
+# View merged results
+daa$cmo_all
+```
+
+```{r}
+# ==============================================================================
+# Create Combined Level Order
+# ==============================================================================
+
+# Concatenate all level names for consistent plot ordering
+lv_all <- c(lv_groups, lv_clusters, lv_subclusters, lv_cellcycle)
+```
+
+```{r}
+# View combined levels
+lv_all
+```
+
+```{r}
+# Check for any duplicate names across levels
+duplicated(lv_all)
+```
+
+# ==============================================================================
+# SECTION 16: ATF3 KO DIFFERENCE BAR PLOT
+# ==============================================================================
+
+```{r,fig.width=20, fig.height=4.8}
+# ==============================================================================
+# Create Relative Difference Bar Plot - Atf3 KO vs Control
+# ==============================================================================
+
+# Calculate normalized proportion differences between conditions
+# Positive = higher in KO, Negative = higher in Control
+
+difference_data <- daa$cmo_all %>%
+  # Add observation names from row names
+  mutate(Observation = rownames(daa$cmo_all)) %>%
+  # Select relevant columns for Atf3 comparison
+  select(Observation, Control = PropMean.Control, Atf3KO = PropMean.Atf3KO) %>%
+  mutate(
+    # Calculate total for normalization
+    Total = Control + Atf3KO,
+    # Normalize proportions to sum to 1
+    Control = Control / Total,
+    Atf3KO = Atf3KO / Total
+  ) %>%
+  select(-Total) %>%
+  # Reshape for calculation
+  pivot_longer(cols = c(Control, Atf3KO), 
+               names_to = "Group", 
+               values_to = "Proportion") %>%
+  pivot_wider(names_from = Group, values_from = Proportion) %>%
+  mutate(
+    # Calculate difference (positive = KO higher)
+    Difference = Atf3KO - Control,
+    # Apply custom ordering
+    Observation = factor(Observation, levels = lv_all)
+  )
+
+# Define divider positions between annotation levels
+divider_positions <- c(3, 18, 58)
+
+# ==============================================================================
+# Create Bar Plot
+# ==============================================================================
+
+ggplot(difference_data, aes(x = Observation, y = Difference, fill = Difference > 0)) +
+  # geom_bar with stat="identity": Use pre-calculated values
+  geom_bar(stat = "identity", width = 0.6, color = "black") +
+  # Add vertical dividers between annotation levels
+  geom_vline(xintercept = divider_positions + 0.5, linetype = 1, 
+             color = "grey20", size = 0.8) +
+  # Colorblind-friendly colors from viridis
+  scale_fill_manual(
+    values = c("TRUE" = viridis(5)[5], "FALSE" = viridis(5)[1]),
+    name = "Comparison",
+    labels = c("Control Higher", "Atf3-KO Higher")
+  ) +
+  labs(
+    title = "Relative Difference Between Cell Type Abundance of Atf3-KO and Control",
+    subtitle = "Normalized proportions across cell type annotations",
+    x = NULL,
+    y = "Difference (Atf3KO - Control)"
+  ) +
+  theme_classic(base_size = 17) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "plain"),
+    axis.text.y = element_text(face = "plain"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    plot.subtitle = element_text(hjust = 0.5, face = "italic", size = 12),
+    legend.position = c(1, 1.27),
+    legend.justification = c("right", "top"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    legend.background = element_blank()
+  ) +
+  guides(fill = guide_legend(reverse = TRUE))
+```
+
+```{r}
+# ==============================================================================
+# Export Atf3 Difference Plot
+# ==============================================================================
+
+# ggsave(): Save plot in multiple formats
+# width/height: Plot dimensions in inches
+# dpi = 600: High resolution for publication
+
+ggsave("./atf3_new_propeller.png", width = 20, height = 5, units = "in", dpi = 600)
+ggsave("./atf3_new_propeller.pdf", width = 20, height = 5, units = "in", dpi = 600)
+ggsave("./atf3_new_propeller.svg", width = 20, height = 5, units = "in", dpi = 600)
+```
+
+# ==============================================================================
+# SECTION 17: ZFP711 KO DIFFERENCE BAR PLOT
+# ==============================================================================
+
+```{r,fig.width=20, fig.height=4.8}
+# ==============================================================================
+# Create Relative Difference Bar Plot - Zfp711 KO vs Control
+# ==============================================================================
+
+# Same analysis as Atf3, but for Zfp711 knockout
+difference_data <- daa$cmo_all %>%
+  mutate(Observation = rownames(daa$cmo_all)) %>%
+  # Select Zfp711 columns
+  select(Observation, Control = PropMean.Control, Zfp711KO = PropMean.Zfp711KO) %>%
+  mutate(
+    Total = Control + Zfp711KO,
+    Control = Control / Total,
+    Zfp711KO = Zfp711KO / Total
+  ) %>%
+  select(-Total) %>%
+  pivot_longer(cols = c(Control, Zfp711KO), 
+               names_to = "Group", 
+               values_to = "Proportion") %>%
+  pivot_wider(names_from = Group, values_from = Proportion) %>%
+  mutate(
+    Difference = Zfp711KO - Control,
+    Observation = factor(Observation, levels = lv_all)
+  )
+
+divider_positions <- c(3, 18, 58)
+
+ggplot(difference_data, aes(x = Observation, y = Difference, fill = Difference > 0)) +
+  geom_bar(stat = "identity", width = 0.6, color = "black") +
+  geom_vline(xintercept = divider_positions + 0.5, linetype = 1, 
+             color = "grey20", size = 0.8) +
+  scale_fill_manual(
+    values = c("TRUE" = viridis(5)[5], "FALSE" = viridis(5)[1]),
+    name = "Comparison",
+    labels = c("Control Higher", "Zfp711-KO Higher")
+  ) +
+  labs(
+    title = "Relative Difference Between Cell Type Abundance of Zfp711-KO and Control",
+    subtitle = "Normalized proportions across cell type annotations",
+    x = NULL,
+    y = "Difference (Zfp711KO - Control)"
+  ) +
+  theme_classic(base_size = 17) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "plain"),
+    axis.text.y = element_text(face = "plain"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    plot.subtitle = element_text(hjust = 0.5, face = "italic", size = 12),
+    legend.position = c(1, 1.27),
+    legend.justification = c("right", "top"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    legend.background = element_blank()
+  ) +
+  guides(fill = guide_legend(reverse = TRUE))
+```
+
+```{r}
+# View cluster-level results
+daa$cmo_clusters_logit
+```
+
+
+
+```{r}
+# ==============================================================================
+# Export Zfp711 Difference Plot
+# ==============================================================================
+
+ggsave("./zfp711_new_propeller.png", width = 20, height = 5, units = "in", dpi = 600)
+ggsave("./zfp711_new_propeller.pdf", width = 20, height = 5, units = "in", dpi = 600)
+ggsave("./zfp711_new_propeller.svg", width = 20, height = 5, units = "in", dpi = 600)
+```
+
+# ==============================================================================
+# SECTION 18: BCL6B KO DIFFERENCE BAR PLOT
+# ==============================================================================
+
+```{r,fig.width=20, fig.height=4.8}
+# ==============================================================================
+# Create Relative Difference Bar Plot - Bcl6b KO vs Control
+# ==============================================================================
+
+# Same analysis for Bcl6b knockout
+difference_data <- daa$cmo_all %>%
+  mutate(Observation = rownames(daa$cmo_all)) %>%
+  # Select Bcl6b columns
+  select(Observation, Control = PropMean.Control, Bcl6bKO = PropMean.Bcl6bKO) %>%
+  mutate(
+    Total = Control + Bcl6bKO,
+    Control = Control / Total,
+    Bcl6bKO = Bcl6bKO / Total
+  ) %>%
+  select(-Total) %>%
+  pivot_longer(cols = c(Control, Bcl6bKO), 
+               names_to = "Group", 
+               values_to = "Proportion") %>%
+  pivot_wider(names_from = Group, values_from = Proportion) %>%
+  mutate(
+    Difference = Bcl6bKO - Control,
+    Observation = factor(Observation, levels = lv_all)
+  )
+
+divider_positions <- c(3, 18, 58)
+
+ggplot(difference_data, aes(x = Observation, y = Difference, fill = Difference > 0)) +
+  geom_bar(stat = "identity", width = 0.6, color = "black") +
+  geom_vline(xintercept = divider_positions + 0.5, linetype = 1, 
+             color = "grey20", size = 0.8) +
+  scale_fill_manual(
+    values = c("TRUE" = viridis(5)[5], "FALSE" = viridis(5)[1]),
+    name = "Comparison",
+    labels = c("Control Higher", "Bcl6b-KO Higher")
+  ) +
+  labs(
+    title = "Relative Difference Between Cell Type Abundance of Bcl6b-KO and Control",
+    subtitle = "Normalized proportions across cell type annotations",
+    x = NULL,
+    y = "Difference (Bcl6bKO - Control)"
+  ) +
+  theme_classic(base_size = 17) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "plain"),
+    axis.text.y = element_text(face = "plain"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    plot.subtitle = element_text(hjust = 0.5, face = "italic", size = 12),
+    legend.position = c(1, 1.27),
+    legend.justification = c("right", "top"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    legend.background = element_blank()
+  ) +
+  guides(fill = guide_legend(reverse = TRUE))
+```
+
+```{r}
+# ==============================================================================
+# Export Bcl6b Difference Plot
+# ==============================================================================
+
+ggsave("./bcl6b_new_propeller.png", width = 20, height = 5, units = "in", dpi = 600)
+ggsave("./bcl6b_new_propeller.pdf", width = 20, height = 5, units = "in", dpi = 600)
+ggsave("./bcl6b_new_propeller.svg", width = 20, height = 5, units = "in", dpi = 600)
+```
+
+# ==============================================================================
+# SECTION 19: EXPORT ALL RESULTS
+# ==============================================================================
+
+# saving 
+
+```{r}
+# ==============================================================================
+# Export All DAA Results to Excel
+# ==============================================================================
+
+library(writexl)
+
+# write_xlsx(): Export list of data frames to Excel
+# Each list element becomes a separate sheet
+write_xlsx(daa, path = "./daa_all.xlsx")
+```
+
+# ==============================================================================
+# SECTION 20: SESSION INFORMATION
+# ==============================================================================
+
+```{r}
+# ==============================================================================
+# Record Session Information for Reproducibility
+# ==============================================================================
+
+# sessionInfo(): Displays R version, platform, and all loaded packages
+sessionInfo()
+```
