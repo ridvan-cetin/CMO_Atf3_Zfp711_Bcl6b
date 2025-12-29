@@ -17,6 +17,15 @@ Bioinformatics analysis code and supporting resources for:
 
 - **Interactive single-cell explorer (Shiny):** https://ridvan.shinyapps.io/shinyapp/
 
+## What is in this repository
+
+This repository contains the analysis notebooks/scripts used to process and analyze multiplexed single-cell RNA-seq and flow cytometry data generated from in vitro differentiating mouse ESCs, including KO vs WT comparisons for **Atf3**, **Zfp711**, and **Bcl6b**.
+
+Primary analysis “entry points” (linked files are in `Analysis_Codes/`):
+
+
+
+
 ## Data availability
 
 - **scRNA-seq data:** BioStudies / ArrayExpress accession **E-MTAB-14678**  
@@ -29,6 +38,20 @@ Bioinformatics analysis code and supporting resources for:
   - https://genome.ucsc.edu/s/mdrcetin/hg19_ZNF711
   - https://genome.ucsc.edu/s/mdrcetin/hg38_ZNF711
   
+## How to use
+
+### Option A — Browse results without running code
+- Start with the manuscript-support website: https://ridvan-cetin.github.io/CMO_Atf3_Zfp711_Bcl6b/
+- Explore the processed single-cell data via Shiny: https://ridvan.shinyapps.io/shinyapp/
+
+### Option B — Re-run analyses locally
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/ridvan-cetin/CMO_Atf3_Zfp711_Bcl6b.git
+   cd CMO_Atf3_Zfp711_Bcl6b
+
+
+
 
 https://ridvan-cetin.github.io/CMO_Atf3_Zfp711_Bcl6b/
 
