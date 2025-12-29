@@ -1,11 +1,16 @@
 title: Distinct roles of Atf3, Zfp711 and Bcl6b in early embryonic hematopoietic and endothelial lineage specification
-description: Manuscript-Support Page
+description: Manuscript-Support Page for Cetin et al. (2025) Development
 theme: jekyll-theme-cayman
 author: Ridvan Cetin
-baseurl: "/CMO_Atf3_Zfp711_Bcl6b/" # Set this to the subdirectory of your site
-url: "https://ridvan-cetin.github.io" # Do not include the subdirectory here
+baseurl: "/CMO_Atf3_Zfp711_Bcl6b"
+url: "https://ridvan-cetin.github.io"
 
 # Optional configurations
 markdown: kramdown
 plugins:
   - jekyll-feed
+
+# Exclude files from build
+exclude:
+  - README.md
+  - LICENSE
