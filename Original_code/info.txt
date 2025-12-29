@@ -1,0 +1,1 @@
+This folder contains the original code that was used for data analysis. A little bit messy and chaotic. Including '9_DEGs_categorization.Rmd'  used for preprint/first version of this study, after -higher prefixes for revisions. 
